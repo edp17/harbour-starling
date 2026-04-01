@@ -1,0 +1,3419 @@
+#include "starlingclient.h"
+#include "tokenstore.h"
+
+#include <QDate>
+#include <QDateTime>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QUrlQuery>
+#include <functional>
+#include <algorithm>
+#include <QBuffer>
+#include <QSettings>
+#include <QCryptographicHash>
+#include <QUuid>
+#include <QtMath>
+#include <QLocale>
+#include <QtGlobal>
+#include <openssl/evp.h>
+#include <openssl/pem.h>
+#include <openssl/bio.h>
+#include <openssl/err.h>
+
+static const char *BASE_URL = "https://api.starlingbank.com";
+
+StarlingClient::StarlingClient(QObject *parent)
+    : QObject(parent)
+{
+    setLocked(true);
+    setStatus(QStringLiteral("Authentication required."));
+
+    QSettings settings;
+    m_autoLockMinutes = settings.value(QStringLiteral("security/autoLockMinutes"), 2).toInt();
+    m_lockOnBackground = settings.value(QStringLiteral("security/lockOnBackground"), true).toBool();
+    m_pinHash = settings.value(QStringLiteral("security/pinHash")).toString();
+    m_pinSalt = settings.value(QStringLiteral("security/pinSalt")).toString();
+
+    m_relockTimer.setSingleShot(true);
+    m_relockTimer.setInterval(m_autoLockMinutes * 60 * 1000);
+    connect(&m_relockTimer, &QTimer::timeout, this, [this]() {
+        lock();
+    });
+
+    setOnline(m_networkConfigManager.isOnline());
+
+    connect(&m_networkConfigManager, &QNetworkConfigurationManager::onlineStateChanged,
+            this, [this](bool isOnline) {
+        const bool wasOnline = m_online;
+        setOnline(isOnline);
+
+        if (!isOnline) {
+            setStatus(QStringLiteral("No internet connection."));
+            return;
+        }
+
+        if (!wasOnline
+                && !m_locked
+                && !m_token.trimmed().isEmpty()
+                && !m_initializing
+                && !m_busy) {
+            refreshAll(m_startupDaysBack > 0 ? m_startupDaysBack : 14);
+        }
+    });
+}
+
+// Payments
+QVariantList StarlingClient::sourceAccounts() const
+{
+    return m_sourceAccounts;
+}
+
+QVariantMap StarlingClient::paymentDraft() const
+{
+    return m_paymentDraft;
+}
+
+QString StarlingClient::paymentPreviewJson() const
+{
+    return m_paymentPreviewJson;
+}
+
+bool StarlingClient::paymentPreviewReady() const
+{
+    return m_paymentPreviewReady;
+}
+
+void StarlingClient::clearPaymentDraft()
+{
+    m_paymentDraft.clear();
+    m_paymentPreviewJson.clear();
+    m_paymentPreviewReady = false;
+
+    emit paymentDraftChanged();
+    emit paymentPreviewJsonChanged();
+    emit paymentPreviewReadyChanged();
+}
+
+void StarlingClient::preparePaymentDraft(const QString &sourceAccountUid,
+                                         const QString &categoryUid,
+                                         const QString &sourceAccountName,
+                                         const QString &sourceAccountNumber,
+                                         const QString &sourceSortCode,
+                                         const QString &payeeUid,
+                                         const QString &payeeName,
+                                         const QString &destinationPayeeAccountUid,
+                                         const QString &accountDescription,
+                                         const QString &accountIdentifier,
+                                         const QString &bankIdentifier,
+                                         const QString &amountText,
+                                         const QString &reference)
+{
+    m_paymentDraft.clear();
+    m_paymentPreviewJson.clear();
+    m_paymentPreviewReady = false;
+
+    m_paymentDraft.insert(QStringLiteral("sourceAccountUid"), sourceAccountUid.trimmed());
+    m_paymentDraft.insert(QStringLiteral("categoryUid"), categoryUid.trimmed());
+    m_paymentDraft.insert(QStringLiteral("sourceAccountName"), sourceAccountName.trimmed());
+    m_paymentDraft.insert(QStringLiteral("sourceAccountNumber"), sourceAccountNumber.trimmed());
+    m_paymentDraft.insert(QStringLiteral("sourceSortCode"), sourceSortCode.trimmed());
+
+    m_paymentDraft.insert(QStringLiteral("payeeUid"), payeeUid.trimmed());
+    m_paymentDraft.insert(QStringLiteral("payeeName"), payeeName.trimmed());
+    m_paymentDraft.insert(QStringLiteral("destinationPayeeAccountUid"), destinationPayeeAccountUid.trimmed());
+    m_paymentDraft.insert(QStringLiteral("accountDescription"), accountDescription.trimmed());
+    m_paymentDraft.insert(QStringLiteral("accountIdentifier"), accountIdentifier.trimmed());
+    m_paymentDraft.insert(QStringLiteral("bankIdentifier"), bankIdentifier.trimmed());
+    m_paymentDraft.insert(QStringLiteral("amountText"), amountText.trimmed());
+    m_paymentDraft.insert(QStringLiteral("reference"), reference.trimmed());
+    m_paymentDraft.insert(QStringLiteral("currency"), QStringLiteral("GBP"));
+
+    emit paymentDraftChanged();
+    emit paymentPreviewJsonChanged();
+    emit paymentPreviewReadyChanged();
+}
+
+bool StarlingClient::buildPaymentPreview()
+{
+    const QString sourceAccountUid =
+            m_paymentDraft.value(QStringLiteral("sourceAccountUid")).toString().trimmed();
+    const QString categoryUid =
+            m_paymentDraft.value(QStringLiteral("categoryUid")).toString().trimmed();
+    const QString payeeName =
+            m_paymentDraft.value(QStringLiteral("payeeName")).toString().trimmed();
+    const QString destinationPayeeAccountUid =
+            m_paymentDraft.value(QStringLiteral("destinationPayeeAccountUid")).toString().trimmed();
+    const QString amountText =
+            m_paymentDraft.value(QStringLiteral("amountText")).toString().trimmed();
+    const QString reference =
+            m_paymentDraft.value(QStringLiteral("reference")).toString().trimmed();
+
+    if (sourceAccountUid.isEmpty()) {
+        setStatus(QStringLiteral("Missing source account UID."));
+        return false;
+    }
+
+    if (categoryUid.isEmpty()) {
+        setStatus(QStringLiteral("Missing category UID."));
+        return false;
+    }
+
+    if (payeeName.isEmpty()) {
+        setStatus(QStringLiteral("Missing payee name."));
+        return false;
+    }
+
+    if (destinationPayeeAccountUid.isEmpty()) {
+        setStatus(QStringLiteral("Missing destination payee account UID."));
+        return false;
+    }
+
+    if (amountText.isEmpty()) {
+        setStatus(QStringLiteral("Enter an amount."));
+        return false;
+    }
+
+    if (reference.isEmpty()) {
+        setStatus(QStringLiteral("Enter a payment reference."));
+        return false;
+    }
+
+    bool ok = false;
+    const double amount = amountText.toDouble(&ok);
+    if (!ok || amount <= 0.0) {
+        setStatus(QStringLiteral("Enter a valid amount."));
+        return false;
+    }
+
+    if (reference.length() > 18) {
+        setStatus(QStringLiteral("Reference must be 18 characters or fewer."));
+        return false;
+    }
+
+    const qint64 minorUnits = qRound64(amount * 100.0);
+    if (minorUnits <= 0) {
+        setStatus(QStringLiteral("Enter a valid amount."));
+        return false;
+    }
+
+    const QString externalIdentifier =
+            QUuid::createUuid().toString().remove('{').remove('}');
+
+    m_paymentDraft.insert(QStringLiteral("amountMinorUnits"), minorUnits);
+    m_paymentDraft.insert(QStringLiteral("amountDisplay"),
+                          QStringLiteral("£%1").arg(QString::number(amount, 'f', 2)));
+    m_paymentDraft.insert(QStringLiteral("externalIdentifier"), externalIdentifier);
+    m_paymentDraft.insert(QStringLiteral("requestMethod"), QStringLiteral("PUT"));
+
+    const QString requestPath =
+            QStringLiteral("/api/v2/payments/local/account/%1/category/%2")
+            .arg(sourceAccountUid, categoryUid);
+
+    m_paymentDraft.insert(QStringLiteral("requestPath"), requestPath);
+
+    QJsonObject root;
+    root.insert(QStringLiteral("externalIdentifier"), externalIdentifier);
+    root.insert(QStringLiteral("destinationPayeeAccountUid"), destinationPayeeAccountUid);
+    root.insert(QStringLiteral("reference"), reference);
+
+    QJsonObject amountObj;
+    amountObj.insert(QStringLiteral("currency"), QStringLiteral("GBP"));
+    amountObj.insert(QStringLiteral("minorUnits"), static_cast<qint64>(minorUnits));
+    root.insert(QStringLiteral("amount"), amountObj);
+
+    QJsonDocument doc(root);
+    m_paymentPreviewJson = QString::fromUtf8(doc.toJson(QJsonDocument::Indented));
+    m_paymentPreviewReady = true;
+
+    emit paymentDraftChanged();
+    emit paymentPreviewJsonChanged();
+    emit paymentPreviewReadyChanged();
+
+    setStatus(QStringLiteral("Payment preview ready."));
+    return true;
+}
+
+bool StarlingClient::paymentSubmitting() const
+{
+    return m_paymentSubmitting;
+}
+
+bool StarlingClient::paymentSubmitted() const
+{
+    return m_paymentSubmitted;
+}
+
+QString StarlingClient::paymentResultMessage() const
+{
+    return m_paymentResultMessage;
+}
+
+void StarlingClient::setPaymentSubmitting(bool value)
+{
+    if (m_paymentSubmitting == value)
+        return;
+
+    m_paymentSubmitting = value;
+    emit paymentSubmittingChanged();
+}
+
+void StarlingClient::setPaymentSubmitted(bool value)
+{
+    if (m_paymentSubmitted == value)
+        return;
+
+    m_paymentSubmitted = value;
+    emit paymentSubmittedChanged();
+}
+
+void StarlingClient::setPaymentResultMessage(const QString &value)
+{
+    if (m_paymentResultMessage == value)
+        return;
+
+    m_paymentResultMessage = value;
+    emit paymentResultMessageChanged();
+}
+
+void StarlingClient::clearPaymentResult()
+{
+    setPaymentSubmitting(false);
+    setPaymentSubmitted(false);
+    setPaymentResultMessage(QString());
+}
+
+bool StarlingClient::submitPreparedPayment()
+{
+    if (m_apiKeyId.trimmed().isEmpty()) {
+        setApiKeyId(m_tokenStore.loadApiKeyId());
+    }
+
+    if (m_privateApiKeyPem.trimmed().isEmpty()) {
+        setPrivateApiKeyPem(m_tokenStore.loadPrivateApiKeyPem());
+    }
+
+    if (m_token.isEmpty()) {
+        setPaymentResultMessage(QStringLiteral("Main token not loaded."));
+        setStatus(QStringLiteral("Main token not loaded."));
+        return false;
+    }
+
+    const QString sourceAccountUid =
+            m_paymentDraft.value(QStringLiteral("sourceAccountUid")).toString().trimmed();
+    const QString categoryUid =
+            m_paymentDraft.value(QStringLiteral("categoryUid")).toString().trimmed();
+    const QString destinationPayeeAccountUid =
+            m_paymentDraft.value(QStringLiteral("destinationPayeeAccountUid")).toString().trimmed();
+    const QString externalIdentifier =
+            m_paymentDraft.value(QStringLiteral("externalIdentifier")).toString().trimmed();
+    const QString reference =
+            m_paymentDraft.value(QStringLiteral("reference")).toString().trimmed();
+    const qint64 minorUnits =
+            m_paymentDraft.value(QStringLiteral("amountMinorUnits")).toLongLong();
+    const QString currency =
+            m_paymentDraft.value(QStringLiteral("currency")).toString().trimmed();
+
+    if (sourceAccountUid.isEmpty()) {
+        setPaymentResultMessage(QStringLiteral("Missing source account UID."));
+        return false;
+    }
+
+    if (categoryUid.isEmpty()) {
+        setPaymentResultMessage(QStringLiteral("Missing category UID."));
+        return false;
+    }
+
+    if (destinationPayeeAccountUid.isEmpty()) {
+        setPaymentResultMessage(QStringLiteral("Missing destination payee account UID."));
+        return false;
+    }
+
+    if (externalIdentifier.isEmpty()) {
+        setPaymentResultMessage(QStringLiteral("Missing external identifier."));
+        return false;
+    }
+
+    if (reference.isEmpty()) {
+        setPaymentResultMessage(QStringLiteral("Missing payment reference."));
+        return false;
+    }
+
+    if (currency.isEmpty()) {
+        setPaymentResultMessage(QStringLiteral("Missing currency."));
+        return false;
+    }
+
+    if (minorUnits <= 0) {
+        setPaymentResultMessage(QStringLiteral("Invalid payment amount."));
+        return false;
+    }
+
+    clearPaymentResult();
+    setPaymentSubmitting(true);
+    setStatus(QStringLiteral("Submitting payment..."));
+
+    const QString path =
+            QStringLiteral("/api/v2/payments/local/account/%1/category/%2")
+            .arg(sourceAccountUid, categoryUid);
+
+    QJsonObject payload;
+    payload.insert(QStringLiteral("externalIdentifier"), externalIdentifier);
+    payload.insert(QStringLiteral("destinationPayeeAccountUid"), destinationPayeeAccountUid);
+    payload.insert(QStringLiteral("reference"), reference);
+
+    QJsonObject amountObj;
+    amountObj.insert(QStringLiteral("currency"), currency);
+    amountObj.insert(QStringLiteral("minorUnits"), static_cast<qint64>(minorUnits));
+    payload.insert(QStringLiteral("amount"), amountObj);
+
+    sendJsonWithToken(path,
+                      QStringLiteral("PUT"),
+                      payload,
+                      m_token,
+                      [this](const QByteArray &body) {
+        setPaymentSubmitting(false);
+        setPaymentSubmitted(true);
+
+        QString message = m_consentPending
+                ? QStringLiteral("Payment pending approval in the Starling app.")
+                : QStringLiteral("Payment submitted.");
+        if (!body.isEmpty()) {
+            const QJsonDocument doc = QJsonDocument::fromJson(body);
+            if (doc.isObject()) {
+                const QJsonObject obj = doc.object();
+
+                const QString paymentUid = obj.value(QStringLiteral("paymentUid")).toString();
+                const QString status = obj.value(QStringLiteral("status")).toString();
+
+                if (!paymentUid.isEmpty() && !status.isEmpty()) {
+                    message = QStringLiteral("Payment submitted. UID: %1, status: %2")
+                            .arg(paymentUid, status);
+                } else if (!paymentUid.isEmpty()) {
+                    message = QStringLiteral("Payment submitted. UID: %1").arg(paymentUid);
+                } else if (!status.isEmpty()) {
+                    message = QStringLiteral("Payment submitted. Status: %1").arg(status);
+                }
+            }
+        }
+
+        setPaymentResultMessage(message);
+        setStatus(message);
+    },
+    true);
+
+    return true;
+}
+
+// PIN management
+bool StarlingClient::pinConfirmationPending() const
+{
+    return m_pinConfirmationPending;
+}
+
+void StarlingClient::requestPinConfirmation()
+{
+    if (!pinEnabled()) {
+        setPinError(QString());
+        setPinPromptVisible(false);
+        return;
+    }
+
+//    if (!m_pinConfirmationPending) {
+        m_pinConfirmationPending = true;
+        emit pinConfirmationPendingChanged();
+//    }
+
+    setPinError(QString());
+    setPinPromptVisible(true);
+}
+
+void StarlingClient::clearPinConfirmation()
+{
+    if (m_pinConfirmationPending) {
+        m_pinConfirmationPending = false;
+        emit pinConfirmationPendingChanged();
+    }
+}
+
+bool StarlingClient::pinEnabled() const
+{
+    return !m_pinHash.isEmpty() && !m_pinSalt.isEmpty();
+}
+
+bool StarlingClient::pinPromptVisible() const
+{
+    return m_pinPromptVisible;
+}
+
+QString StarlingClient::pinError() const
+{
+    return m_pinError;
+}
+
+void StarlingClient::setPinPromptVisible(bool visible)
+{
+    if (m_pinPromptVisible == visible)
+        return;
+
+    m_pinPromptVisible = visible;
+    emit pinPromptVisibleChanged();
+}
+
+void StarlingClient::setPinError(const QString &value)
+{
+    if (m_pinError == value)
+        return;
+
+    m_pinError = value;
+    emit pinErrorChanged();
+}
+
+QString StarlingClient::hashPin(const QString &pin, const QString &salt) const
+{
+    const QByteArray data = (salt + QStringLiteral(":") + pin).toUtf8();
+    return QString::fromLatin1(
+        QCryptographicHash::hash(data, QCryptographicHash::Sha256).toHex());
+}
+
+bool StarlingClient::verifyPinValue(const QString &pin) const
+{
+    if (!pinEnabled())
+        return false;
+
+    return hashPin(pin, m_pinSalt) == m_pinHash;
+}
+
+bool StarlingClient::validateNewPin(const QString &pin,
+                                    const QString &confirmPin,
+                                    QString *error) const
+{
+    const QString p = pin.trimmed();
+    const QString c = confirmPin.trimmed();
+
+    if (p.isEmpty() || c.isEmpty()) {
+        if (error)
+            *error = QStringLiteral("PIN fields must not be empty.");
+        return false;
+    }
+
+    if (p != c) {
+        if (error)
+            *error = QStringLiteral("PIN entries do not match.");
+        return false;
+    }
+
+    if (p.length() < 4 || p.length() > 8) {
+        if (error)
+            *error = QStringLiteral("PIN must be 4 to 8 digits.");
+        return false;
+    }
+
+    for (int i = 0; i < p.length(); ++i) {
+        if (!p.at(i).isDigit()) {
+            if (error)
+                *error = QStringLiteral("PIN must contain digits only.");
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// Local Card management
+static QString maskCardholderName(const QString &input)
+{
+    const QString trimmed = input.trimmed();
+    if (trimmed.isEmpty())
+        return QString();
+
+    if (trimmed.length() == 1)
+        return QStringLiteral("*");
+
+    if (trimmed.length() == 2)
+        return trimmed.left(1) + QStringLiteral("*");
+
+    return trimmed.left(1)
+            + QString(trimmed.length() - 2, QChar('*'))
+            + trimmed.right(1);
+}
+
+static QString maskExpiry(const QString &month, const QString &year)
+{
+    Q_UNUSED(month)
+    Q_UNUSED(year)
+    return QStringLiteral("**/**");
+}
+
+static QString maskCardNumber(const QString &input)
+{
+    QString digits;
+    for (const QChar &c : input) {
+        if (c.isDigit()) {
+            digits.append(c);
+        }
+    }
+
+    if (digits.length() <= 4) {
+        return digits;
+    }
+
+    const QString last4 = digits.right(4);
+    return QStringLiteral("**** **** **** %1").arg(last4);
+}
+
+static QString normalizedCardNumber(const QString &input)
+{
+    QString digits;
+    for (const QChar &c : input) {
+        if (c.isDigit()) {
+            digits.append(c);
+        }
+    }
+    return digits;
+}
+
+bool StarlingClient::hasStoredPhysicalCard() const
+{
+    return !m_tokenStore.loadPhysicalCard().trimmed().isEmpty();
+}
+
+bool StarlingClient::savePhysicalCardAfterConfirmation(const QString &cardholderName,
+                                                       const QString &cardNumber,
+                                                       const QString &expiryMonth,
+                                                       const QString &expiryYear)
+{
+    const QString cleanName = cardholderName.trimmed();
+    const QString cleanNumber = normalizedCardNumber(cardNumber);
+    const QString cleanMonth = expiryMonth.trimmed();
+    const QString cleanYear = expiryYear.trimmed();
+
+    if (cleanName.isEmpty() || cleanNumber.isEmpty()
+            || cleanMonth.isEmpty() || cleanYear.isEmpty()) {
+        setPinSettingsError(QStringLiteral("Please fill in all card fields."));
+        return false;
+    }
+
+    if (cleanNumber.length() < 12 || cleanNumber.length() > 19) {
+        setPinSettingsError(QStringLiteral("Card number looks invalid."));
+        return false;
+    }
+
+    bool okMonth = false;
+    const int month = cleanMonth.toInt(&okMonth);
+    if (!okMonth || month < 1 || month > 12) {
+        setPinSettingsError(QStringLiteral("Expiry month must be between 1 and 12."));
+        return false;
+    }
+
+    if (cleanYear.length() < 2 || cleanYear.length() > 4) {
+        setPinSettingsError(QStringLiteral("Expiry year looks invalid."));
+        return false;
+    }
+
+    QJsonObject obj;
+    obj.insert(QStringLiteral("cardholderName"), cleanName);
+    obj.insert(QStringLiteral("cardNumber"), cleanNumber);
+    obj.insert(QStringLiteral("expiryMonth"), cleanMonth);
+    obj.insert(QStringLiteral("expiryYear"), cleanYear);
+
+    const QString json = QString::fromUtf8(
+                QJsonDocument(obj).toJson(QJsonDocument::Compact));
+
+    if (!m_tokenStore.savePhysicalCard(json)) {
+        setPinSettingsError(QStringLiteral("Failed to save physical card."));
+        return false;
+    }
+
+    clearPinSettingsError();
+    return true;
+}
+
+QVariantMap StarlingClient::loadStoredPhysicalCardMasked() const
+{
+    QVariantMap result;
+
+    const QString json = m_tokenStore.loadPhysicalCard().trimmed();
+    if (json.isEmpty()) {
+        return result;
+    }
+
+    QJsonParseError err{};
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+        return QVariantMap{};
+    }
+
+    const QJsonObject obj = doc.object();
+    const QString name = obj.value(QStringLiteral("cardholderName")).toString();
+    const QString number = obj.value(QStringLiteral("cardNumber")).toString();
+    const QString month = obj.value(QStringLiteral("expiryMonth")).toString();
+    const QString year = obj.value(QStringLiteral("expiryYear")).toString();
+
+    result.insert(QStringLiteral("cardholderName"), maskCardholderName(name));
+    result.insert(QStringLiteral("cardNumber"), maskCardNumber(number));
+    result.insert(QStringLiteral("expiryMonth"), QStringLiteral("**"));
+    result.insert(QStringLiteral("expiryYear"), QStringLiteral("**"));
+    result.insert(QStringLiteral("expiry"), maskExpiry(month, year));
+
+    return result;
+}
+
+QVariantMap StarlingClient::loadStoredPhysicalCardFullAfterConfirmation()
+{
+    QVariantMap result;
+
+    const QString json = m_tokenStore.loadPhysicalCard().trimmed();
+    if (json.isEmpty()) {
+        setPinSettingsError(QStringLiteral("No physical card stored."));
+        return result;
+    }
+
+    QJsonParseError err{};
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+        setPinSettingsError(QStringLiteral("Stored card data is invalid."));
+        return QVariantMap{};
+    }
+
+    const QJsonObject obj = doc.object();
+    result.insert(QStringLiteral("cardholderName"),
+                  obj.value(QStringLiteral("cardholderName")).toString());
+    result.insert(QStringLiteral("cardNumber"),
+                  obj.value(QStringLiteral("cardNumber")).toString());
+    result.insert(QStringLiteral("expiryMonth"),
+                  obj.value(QStringLiteral("expiryMonth")).toString());
+    result.insert(QStringLiteral("expiryYear"),
+                  obj.value(QStringLiteral("expiryYear")).toString());
+
+    clearPinSettingsError();
+    return result;
+}
+
+bool StarlingClient::deleteStoredPhysicalCardAfterConfirmation()
+{
+    if (!m_tokenStore.clearPhysicalCard()) {
+        const QString detail = m_tokenStore.lastError().trimmed();
+        if (!detail.isEmpty())
+            setPinSettingsError(QStringLiteral("Failed to delete physical card: %1").arg(detail));
+        else
+            setPinSettingsError(QStringLiteral("Failed to delete physical card."));
+        return false;
+    }
+
+    clearPinSettingsError();
+    return true;
+}
+
+// PIN
+bool StarlingClient::hasStoredPhysicalCardPin() const
+{
+    return !m_tokenStore.loadPhysicalCardPin().trimmed().isEmpty();
+}
+
+bool StarlingClient::savePhysicalCardPinAfterConfirmation(const QString &pin,
+                                                          const QString &confirmPin)
+{
+    const QString cleanPin = pin.trimmed();
+    const QString cleanConfirm = confirmPin.trimmed();
+
+    if (cleanPin.isEmpty() || cleanConfirm.isEmpty()) {
+        setPinSettingsError(QStringLiteral("Please enter and confirm the card PIN."));
+        return false;
+    }
+
+    if (cleanPin != cleanConfirm) {
+        setPinSettingsError(QStringLiteral("Card PIN and confirmation do not match."));
+        return false;
+    }
+
+    for (int i = 0; i < cleanPin.length(); ++i) {
+        if (!cleanPin.at(i).isDigit()) {
+            setPinSettingsError(QStringLiteral("Card PIN must contain digits only."));
+            return false;
+        }
+    }
+
+    if (cleanPin.length() != 4) {
+        setPinSettingsError(QStringLiteral("Card PIN must be exactly 4 digits."));
+        return false;
+    }
+
+    if (!m_tokenStore.savePhysicalCardPin(cleanPin)) {
+        const QString detail = m_tokenStore.lastError().trimmed();
+        if (!detail.isEmpty())
+            setPinSettingsError(QStringLiteral("Failed to save card PIN: %1").arg(detail));
+        else
+            setPinSettingsError(QStringLiteral("Failed to save card PIN."));
+        return false;
+    }
+
+    clearPinSettingsError();
+    return true;
+}
+
+QString StarlingClient::loadStoredPhysicalCardPinAfterConfirmation()
+{
+    const QString pin = m_tokenStore.loadPhysicalCardPin().trimmed();
+    if (pin.isEmpty()) {
+        const QString detail = m_tokenStore.lastError().trimmed();
+        if (!detail.isEmpty())
+            setPinSettingsError(QStringLiteral("Failed to load card PIN: %1").arg(detail));
+        else
+            setPinSettingsError(QStringLiteral("No physical card PIN stored."));
+        return QString();
+    }
+
+    clearPinSettingsError();
+    return pin;
+}
+
+bool StarlingClient::deleteStoredPhysicalCardPinAfterConfirmation()
+{
+    if (!m_tokenStore.clearPhysicalCardPin()) {
+        const QString detail = m_tokenStore.lastError().trimmed();
+        if (!detail.isEmpty())
+            setPinSettingsError(QStringLiteral("Failed to delete card PIN: %1").arg(detail));
+        else
+            setPinSettingsError(QStringLiteral("Failed to delete card PIN."));
+        return false;
+    }
+
+    clearPinSettingsError();
+    return true;
+}
+
+// CVV
+bool StarlingClient::hasStoredPhysicalCardCvv() const
+{
+    return !m_tokenStore.loadPhysicalCardCvv().trimmed().isEmpty();
+}
+
+bool StarlingClient::savePhysicalCardCvvAfterConfirmation(const QString &cvv)
+{
+    const QString cleanCvv = cvv.trimmed();
+
+    if (cleanCvv.isEmpty()) {
+        setPinSettingsError(QStringLiteral("Please enter the card CVV."));
+        return false;
+    }
+
+    for (int i = 0; i < cleanCvv.length(); ++i) {
+        if (!cleanCvv.at(i).isDigit()) {
+            setPinSettingsError(QStringLiteral("Card CVV must contain digits only."));
+            return false;
+        }
+    }
+
+    if (cleanCvv.length() < 3 || cleanCvv.length() > 4) {
+        setPinSettingsError(QStringLiteral("Card CVV must be 3 or 4 digits."));
+        return false;
+    }
+
+    if (!m_tokenStore.savePhysicalCardCvv(cleanCvv)) {
+        const QString detail = m_tokenStore.lastError().trimmed();
+        if (!detail.isEmpty())
+            setPinSettingsError(QStringLiteral("Failed to save card CVV: %1").arg(detail));
+        else
+            setPinSettingsError(QStringLiteral("Failed to save card CVV."));
+        return false;
+    }
+
+    clearPinSettingsError();
+    return true;
+}
+
+QString StarlingClient::loadStoredPhysicalCardCvvAfterConfirmation()
+{
+    const QString cvv = m_tokenStore.loadPhysicalCardCvv().trimmed();
+    if (cvv.isEmpty()) {
+        const QString detail = m_tokenStore.lastError().trimmed();
+        if (!detail.isEmpty())
+            setPinSettingsError(QStringLiteral("Failed to load card CVV: %1").arg(detail));
+        else
+            setPinSettingsError(QStringLiteral("No physical card CVV stored."));
+        return QString();
+    }
+
+    clearPinSettingsError();
+    return cvv;
+}
+
+bool StarlingClient::deleteStoredPhysicalCardCvvAfterConfirmation()
+{
+    if (!m_tokenStore.clearPhysicalCardCvv()) {
+        const QString detail = m_tokenStore.lastError().trimmed();
+        if (!detail.isEmpty())
+            setPinSettingsError(QStringLiteral("Failed to delete card CVV: %1").arg(detail));
+        else
+            setPinSettingsError(QStringLiteral("Failed to delete card CVV."));
+        return false;
+    }
+
+    clearPinSettingsError();
+    return true;
+}
+
+// Lock
+int StarlingClient::autoLockMinutes() const
+{
+    return m_autoLockMinutes;
+}
+
+void StarlingClient::setAutoLockMinutes(int minutes)
+{
+    if (minutes < 1)
+        minutes = 1;
+
+    if (m_autoLockMinutes == minutes)
+        return;
+
+    m_autoLockMinutes = minutes;
+
+    QSettings settings;
+    settings.setValue(QStringLiteral("security/autoLockMinutes"), m_autoLockMinutes);
+
+    m_relockTimer.setInterval(m_autoLockMinutes * 60 * 1000);
+
+    if (!m_locked)
+        startRelockTimer();
+
+    emit autoLockMinutesChanged();
+}
+
+bool StarlingClient::lockOnBackground() const
+{
+    return m_lockOnBackground;
+}
+
+void StarlingClient::setLockOnBackground(bool value)
+{
+    if (m_lockOnBackground == value)
+        return;
+
+    m_lockOnBackground = value;
+
+    QSettings settings;
+    settings.setValue(QStringLiteral("security/lockOnBackground"), m_lockOnBackground);
+
+    emit lockOnBackgroundChanged();
+}
+
+void StarlingClient::dismissConsentMessage()
+{
+    clearConsentState();
+}
+
+bool StarlingClient::consentPending() const
+{
+    return m_consentPending;
+}
+
+QString StarlingClient::consentMessage() const
+{
+    return m_consentMessage;
+}
+
+QVariantMap StarlingClient::payeeDetail() const
+{
+    return m_payeeDetail;
+}
+
+void StarlingClient::clearPayeeDetail()
+{
+    if (m_payeeDetail.isEmpty())
+        return;
+
+    m_payeeDetail.clear();
+    emit payeeDetailChanged();
+}
+
+QString StarlingClient::navigationTarget() const
+{
+    return m_navigationTarget;
+}
+
+bool StarlingClient::locked() const
+{
+    return m_locked;
+}
+
+QVariantList StarlingClient::cards() const
+{
+    return m_cards;
+}
+
+QVariantList StarlingClient::payees() const
+{
+    return m_payees;
+}
+
+bool StarlingClient::initializing() const
+{
+    return m_initializing;
+}
+
+QString StarlingClient::token() const
+{
+    return m_token;
+}
+
+void StarlingClient::setLocked(bool value)
+{
+    if (m_locked == value)
+        return;
+
+    m_locked = value;
+    emit lockedChanged();
+}
+
+void StarlingClient::setToken(const QString &token)
+{
+    const QString trimmed = token.trimmed();
+    if (m_token == trimmed)
+        return;
+
+    m_token = trimmed;
+    emit tokenChanged();
+}
+
+QString StarlingClient::accountUid() const
+{
+    return m_accountUid;
+}
+
+QString StarlingClient::categoryUid() const
+{
+    return m_categoryUid;
+}
+
+QString StarlingClient::availableBalance() const
+{
+    return m_availableBalance;
+}
+
+QString StarlingClient::clearedBalance() const
+{
+    return m_clearedBalance;
+}
+
+QString StarlingClient::currency() const
+{
+    return m_currency;
+}
+
+QString StarlingClient::status() const
+{
+    return m_status;
+}
+
+bool StarlingClient::busy() const
+{
+    return m_busy;
+}
+
+void StarlingClient::setConsentPending(bool pending)
+{
+    if (m_consentPending == pending)
+        return;
+
+    m_consentPending = pending;
+    emit consentPendingChanged();
+}
+
+void StarlingClient::setConsentMessage(const QString &message)
+{
+    if (m_consentMessage == message)
+        return;
+
+    m_consentMessage = message;
+    emit consentMessageChanged();
+}
+
+void StarlingClient::clearConsentState()
+{
+    setConsentPending(false);
+    setConsentMessage(QString());
+}
+
+QString StarlingClient::payeeWriteToken() const
+{
+    return m_payeeWriteToken;
+}
+
+void StarlingClient::setPayeeWriteToken(const QString &token)
+{
+    const QString cleaned = token.trimmed();
+    if (m_payeeWriteToken == cleaned)
+        return;
+
+    m_payeeWriteToken = cleaned;
+    emit payeeWriteTokenChanged();
+}
+
+QString StarlingClient::apiKeyId() const
+{
+    return m_apiKeyId;
+}
+
+void StarlingClient::setApiKeyId(const QString &value)
+{
+    const QString cleaned = value.trimmed();
+    if (m_apiKeyId == cleaned)
+        return;
+
+    m_apiKeyId = cleaned;
+    emit apiKeyIdChanged();
+}
+
+QString StarlingClient::privateApiKeyPem() const
+{
+    return m_privateApiKeyPem;
+}
+
+void StarlingClient::setPrivateApiKeyPem(const QString &value)
+{
+    const QString cleaned = value.trimmed();
+    if (m_privateApiKeyPem == cleaned)
+        return;
+
+    m_privateApiKeyPem = cleaned;
+    emit privateApiKeyPemChanged();
+}
+
+void StarlingClient::savePayeeWriteToken()
+{
+    if (!m_tokenStore.savePayeeWriteToken(m_payeeWriteToken)) {
+        setStatus(QStringLiteral("Failed to save payee-write token: %1")
+                  .arg(m_tokenStore.lastError()));
+        return;
+    }
+
+    setStatus(QStringLiteral("Payee-write token saved securely."));
+}
+
+void StarlingClient::loadPayeeWriteToken()
+{
+    setPayeeWriteToken(m_tokenStore.loadPayeeWriteToken());
+}
+
+void StarlingClient::clearPayeeWriteToken()
+{
+    if (!m_tokenStore.clearPayeeWriteToken()) {
+        setStatus(QStringLiteral("Failed to clear payee-write token: %1")
+                  .arg(m_tokenStore.lastError()));
+        return;
+    }
+
+    setPayeeWriteToken(QString());
+    setStatus(QStringLiteral("Payee-write token cleared."));
+}
+
+void StarlingClient::saveApiKeyId()
+{
+    if (!m_tokenStore.saveApiKeyId(m_apiKeyId)) {
+        setStatus(QStringLiteral("Failed to save API key ID: %1")
+                  .arg(m_tokenStore.lastError()));
+        return;
+    }
+
+    setStatus(QStringLiteral("API key ID saved securely."));
+}
+
+void StarlingClient::loadApiKeyId()
+{
+    setApiKeyId(m_tokenStore.loadApiKeyId());
+}
+
+void StarlingClient::clearApiKeyId()
+{
+    if (!m_tokenStore.clearApiKeyId()) {
+        setStatus(QStringLiteral("Failed to clear API key ID: %1")
+                  .arg(m_tokenStore.lastError()));
+        return;
+    }
+
+    setApiKeyId(QString());
+    setStatus(QStringLiteral("API key ID cleared."));
+}
+
+void StarlingClient::savePrivateApiKeyPem()
+{
+    if (!m_tokenStore.savePrivateApiKeyPem(m_privateApiKeyPem)) {
+        setStatus(QStringLiteral("Failed to save private API key: %1")
+                  .arg(m_tokenStore.lastError()));
+        return;
+    }
+
+    setStatus(QStringLiteral("Private API key saved securely."));
+}
+
+void StarlingClient::loadPrivateApiKeyPem()
+{
+    setPrivateApiKeyPem(m_tokenStore.loadPrivateApiKeyPem());
+}
+
+void StarlingClient::clearPrivateApiKeyPem()
+{
+    if (!m_tokenStore.clearPrivateApiKeyPem()) {
+        setStatus(QStringLiteral("Failed to clear private API key: %1")
+                  .arg(m_tokenStore.lastError()));
+        return;
+    }
+
+    setPrivateApiKeyPem(QString());
+    setStatus(QStringLiteral("Private API key cleared."));
+}
+
+void StarlingClient::refreshPayeeDetail(const QString &payeeUid)
+{
+    if (payeeUid.trimmed().isEmpty()) {
+        setStatus(QStringLiteral("Missing payee UID."));
+        return;
+    }
+
+    const QString path = QStringLiteral("/api/v2/payees/%1").arg(payeeUid);
+
+    getJson(path, [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject obj = doc.object();
+
+        QVariantMap row;
+        row.insert(QStringLiteral("payeeUid"), obj.value(QStringLiteral("payeeUid")).toString());
+        row.insert(QStringLiteral("payeeName"), obj.value(QStringLiteral("payeeName")).toString());
+        row.insert(QStringLiteral("phoneNumber"), obj.value(QStringLiteral("phoneNumber")).toString());
+        row.insert(QStringLiteral("payeeType"), obj.value(QStringLiteral("payeeType")).toString());
+        row.insert(QStringLiteral("firstName"), obj.value(QStringLiteral("firstName")).toString());
+        row.insert(QStringLiteral("middleName"), obj.value(QStringLiteral("middleName")).toString());
+        row.insert(QStringLiteral("lastName"), obj.value(QStringLiteral("lastName")).toString());
+        row.insert(QStringLiteral("businessName"), obj.value(QStringLiteral("businessName")).toString());
+        row.insert(QStringLiteral("dateOfBirth"), obj.value(QStringLiteral("dateOfBirth")).toString());
+
+        const QJsonArray accounts = obj.value(QStringLiteral("accounts")).toArray();
+        QVariantList accountRows;
+
+        for (int i = 0; i < accounts.size(); ++i) {
+            const QJsonObject accObj = accounts.at(i).toObject();
+
+            QVariantMap accountRow;
+            accountRow.insert(QStringLiteral("payeeAccountUid"), accObj.value(QStringLiteral("payeeAccountUid")).toString());
+            accountRow.insert(QStringLiteral("payeeChannelType"), accObj.value(QStringLiteral("payeeChannelType")).toString());
+            accountRow.insert(QStringLiteral("description"), accObj.value(QStringLiteral("description")).toString());
+            accountRow.insert(QStringLiteral("defaultAccount"), accObj.value(QStringLiteral("defaultAccount")).toBool());
+            accountRow.insert(QStringLiteral("countryCode"), accObj.value(QStringLiteral("countryCode")).toString());
+            accountRow.insert(QStringLiteral("accountIdentifier"), accObj.value(QStringLiteral("accountIdentifier")).toString());
+            accountRow.insert(QStringLiteral("bankIdentifier"), formatSortCode(accObj.value(QStringLiteral("bankIdentifier")).toString()));
+            accountRow.insert(QStringLiteral("bankIdentifierType"), accObj.value(QStringLiteral("bankIdentifierType")).toString());
+            accountRow.insert(QStringLiteral("secondaryIdentifier"), accObj.value(QStringLiteral("secondaryIdentifier")).toString());
+
+            const QJsonArray refs = accObj.value(QStringLiteral("lastReferences")).toArray();
+            QVariantList refRows;
+            for (int j = 0; j < refs.size(); ++j)
+                refRows.append(refs.at(j).toString());
+
+            accountRow.insert(QStringLiteral("lastReferences"), refRows);
+            accountRows.append(accountRow);
+        }
+
+        row.insert(QStringLiteral("accounts"), accountRows);
+        row.insert(QStringLiteral("accountCount"), accountRows.size());
+
+        m_payeeDetail = row;
+        emit payeeDetailChanged();
+        setStatus(QStringLiteral("Payee details loaded."));
+    });
+}
+
+bool StarlingClient::responseRequiresConsent(const QByteArray &body, QString *messageOut) const
+{
+    const QJsonDocument doc = QJsonDocument::fromJson(body);
+    if (!doc.isObject())
+        return false;
+
+    const QJsonObject obj = doc.object();
+
+    bool pending = false;
+
+    if (obj.value(QStringLiteral("consentRequired")).toBool())
+        pending = true;
+
+    if (obj.value(QStringLiteral("approvalRequired")).toBool())
+        pending = true;
+
+    if (obj.contains(QStringLiteral("consentInformation")))
+        pending = true;
+
+    if (obj.contains(QStringLiteral("consentUid")))
+        pending = true;
+
+    if (!pending)
+        return false;
+
+    QString msg = QStringLiteral("Pending approval in Starling app.");
+
+    const QJsonValue ci = obj.value(QStringLiteral("consentInformation"));
+    if (ci.isObject()) {
+        const QJsonObject cio = ci.toObject();
+        if (!cio.value(QStringLiteral("message")).toString().trimmed().isEmpty())
+            msg = cio.value(QStringLiteral("message")).toString().trimmed();
+    }
+
+    if (messageOut)
+        *messageOut = msg;
+
+    return true;
+}
+
+QString StarlingClient::buildIsoDateHeader() const
+{
+    const QDateTime now = QDateTime::currentDateTime();
+    const int offsetSeconds = now.offsetFromUtc();
+    const int offsetAbs = qAbs(offsetSeconds);
+    const int offsetHours = offsetAbs / 3600;
+    const int offsetMinutes = (offsetAbs % 3600) / 60;
+
+    const QString offsetString = QStringLiteral("%1%2:%3")
+            .arg(offsetSeconds >= 0 ? QStringLiteral("+") : QStringLiteral("-"))
+            .arg(offsetHours, 2, 10, QLatin1Char('0'))
+            .arg(offsetMinutes, 2, 10, QLatin1Char('0'));
+
+    const int microsecondPart = now.time().msec() * 1000;
+
+    return QStringLiteral("%1.%2%3")
+            .arg(now.toString(QStringLiteral("yyyy-MM-dd'T'HH:mm:ss")))
+            .arg(microsecondPart, 6, 10, QLatin1Char('0'))
+            .arg(offsetString);
+}
+
+QByteArray StarlingClient::buildDigestHeader(const QByteArray &body) const
+{
+    const QByteArray hash = QCryptographicHash::hash(body, QCryptographicHash::Sha512);
+    return hash.toBase64();
+}
+
+QByteArray StarlingClient::signWithRsaSha512(const QByteArray &content,
+                                             const QString &privateKeyPem,
+                                             QString *errorMessage) const
+{
+    if (errorMessage)
+        errorMessage->clear();
+
+    const QByteArray pemBytes = privateKeyPem.toUtf8();
+    BIO *bio = BIO_new_mem_buf(pemBytes.constData(), pemBytes.size());
+    if (!bio) {
+        if (errorMessage)
+            *errorMessage = QStringLiteral("Failed to create BIO for private key.");
+        return QByteArray();
+    }
+
+    EVP_PKEY *pkey = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr);
+    BIO_free(bio);
+
+    if (!pkey) {
+        if (errorMessage)
+            *errorMessage = QStringLiteral("Failed to parse private API key PEM.");
+        return QByteArray();
+    }
+
+    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+    if (!ctx) {
+        EVP_PKEY_free(pkey);
+        if (errorMessage)
+            *errorMessage = QStringLiteral("Failed to create signing context.");
+        return QByteArray();
+    }
+
+    QByteArray signatureBase64;
+
+    do {
+        if (EVP_DigestSignInit(ctx, nullptr, EVP_sha512(), nullptr, pkey) != 1) {
+            if (errorMessage)
+                *errorMessage = QStringLiteral("EVP_DigestSignInit failed.");
+            break;
+        }
+
+        if (EVP_DigestSignUpdate(ctx, content.constData(), size_t(content.size())) != 1) {
+            if (errorMessage)
+                *errorMessage = QStringLiteral("EVP_DigestSignUpdate failed.");
+            break;
+        }
+
+        size_t signatureLen = 0;
+        if (EVP_DigestSignFinal(ctx, nullptr, &signatureLen) != 1 || signatureLen == 0) {
+            if (errorMessage)
+                *errorMessage = QStringLiteral("Failed to determine signature length.");
+            break;
+        }
+
+        QByteArray signature;
+        signature.resize(int(signatureLen));
+
+        if (EVP_DigestSignFinal(ctx,
+                                reinterpret_cast<unsigned char *>(signature.data()),
+                                &signatureLen) != 1) {
+            if (errorMessage)
+                *errorMessage = QStringLiteral("EVP_DigestSignFinal failed.");
+            break;
+        }
+
+        signature.resize(int(signatureLen));
+        signatureBase64 = signature.toBase64();
+    } while (false);
+
+    EVP_MD_CTX_free(ctx);
+    EVP_PKEY_free(pkey);
+
+    return signatureBase64;
+}
+
+void StarlingClient::sendJsonWithToken(const QString &path,
+                                       const QString &httpMethod,
+                                       const QJsonObject &payload,
+                                       const QString &bearerToken,
+                                       const std::function<void(const QByteArray &)> &onSuccess,
+                                       bool includeDigestHeader)
+{
+    if (!m_online) {
+        const QString msg = QStringLiteral("No internet connection.");
+        setStatus(msg);
+
+        if (includeDigestHeader) {
+            setPaymentSubmitting(false);
+            setPaymentSubmitted(false);
+            setPaymentResultMessage(msg);
+        }
+        return;
+    }
+
+    if (bearerToken.trimmed().isEmpty()) {
+        setStatus(QStringLiteral("Authentication token is missing."));
+        return;
+    }
+
+    beginRequest();
+
+    QNetworkRequest req(QUrl(QString::fromLatin1(BASE_URL) + path));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    req.setRawHeader("Accept", QByteArray("application/json"));
+
+    const QByteArray body = QJsonDocument(payload).toJson(QJsonDocument::Compact);
+
+    QByteArray authorizationHeader = QByteArray("Bearer ") + bearerToken.toUtf8();
+
+    if (includeDigestHeader) {
+        if (m_apiKeyId.trimmed().isEmpty()) {
+            setStatus(QStringLiteral("API key ID is missing."));
+            setPaymentSubmitting(false);
+            setPaymentSubmitted(false);
+            setPaymentResultMessage(QStringLiteral("API key ID is missing."));
+            endRequest();
+            return;
+        }
+
+        if (m_privateApiKeyPem.trimmed().isEmpty()) {
+            setStatus(QStringLiteral("Private API key is missing."));
+            setPaymentSubmitting(false);
+            setPaymentSubmitted(false);
+            setPaymentResultMessage(QStringLiteral("Private API key is missing."));
+            endRequest();
+            return;
+        }
+
+        const QByteArray digestValue = buildDigestHeader(body);
+        const QString dateHeader = buildIsoDateHeader();
+
+        req.setRawHeader("Digest", digestValue);
+        req.setRawHeader("Date", dateHeader.toUtf8());
+
+        const QString requestTarget = QStringLiteral("%1 %2")
+                .arg(httpMethod.trimmed().toLower(), path);
+
+        const QByteArray signingContent =
+                QByteArray("(request-target): ") + requestTarget.toUtf8() + '\n' +
+                QByteArray("Date: ") + dateHeader.toUtf8() + '\n' +
+                QByteArray("Digest: ") + digestValue;
+
+        QString signError;
+        const QByteArray signatureBase64 =
+                signWithRsaSha512(signingContent, m_privateApiKeyPem, &signError);
+
+        if (signatureBase64.isEmpty()) {
+            const QString msg = signError.isEmpty()
+                    ? QStringLiteral("Failed to sign payment request.")
+                    : signError;
+            setStatus(msg);
+            setPaymentSubmitting(false);
+            setPaymentSubmitted(false);
+            setPaymentResultMessage(msg);
+            endRequest();
+            return;
+        }
+
+        authorizationHeader += QByteArray(";Signature keyid=\"")
+                + m_apiKeyId.toUtf8()
+                + QByteArray("\",algorithm=\"rsa-sha512\",headers=\"(request-target) Date Digest\",signature=\"")
+                + signatureBase64
+                + QByteArray("\"");
+    }
+
+    req.setRawHeader("Authorization", authorizationHeader);
+
+    QBuffer *buffer = new QBuffer;
+    buffer->setData(body);
+    buffer->open(QIODevice::ReadOnly);
+
+    QNetworkReply *reply = m_nam.sendCustomRequest(req, httpMethod.toUtf8(), buffer);
+    buffer->setParent(reply);
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply, onSuccess]() {
+        const int statusCode =
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+
+        const QByteArray responseBody = reply->readAll();
+
+        const QString qtError =
+                reply->error() == QNetworkReply::NoError ? QString() : reply->errorString();
+        const QString bodyText = QString::fromUtf8(responseBody).trimmed();
+
+        if (reply->error() != QNetworkReply::NoError) {
+            QString msg = QStringLiteral("HTTP %1").arg(statusCode);
+            if (!qtError.isEmpty())
+                msg += QStringLiteral(" | Qt: %1").arg(qtError);
+            if (!bodyText.isEmpty())
+                msg += QStringLiteral(" | Body: %1").arg(bodyText);
+
+            qWarning() << "sendJsonWithToken failed"
+                       << "url=" << reply->url()
+                       << "status=" << statusCode
+                       << "qtError=" << qtError
+                       << "body=" << bodyText;
+
+            setStatus(msg);
+            setPaymentSubmitting(false);
+            setPaymentSubmitted(false);
+            setPaymentResultMessage(msg);
+            endRequest();
+            reply->deleteLater();
+            return;
+        }
+
+        QString consentMsg;
+        if (responseRequiresConsent(responseBody, &consentMsg)) {
+            setConsentPending(true);
+            setConsentMessage(consentMsg);
+            setStatus(consentMsg);
+        } else {
+            clearConsentState();
+        }
+
+        onSuccess(responseBody);
+        endRequest();
+        reply->deleteLater();
+    });
+}
+
+void StarlingClient::sendDeleteWithToken(const QString &path,
+                                         const QString &bearerToken,
+                                         const std::function<void(const QByteArray &)> &onSuccess)
+{
+    if (!m_online) {
+        setStatus(QStringLiteral("No internet connection."));
+        return;
+    }
+
+    if (bearerToken.trimmed().isEmpty()) {
+        setStatus(QStringLiteral("Missing payee-write token."));
+        return;
+    }
+
+    beginRequest();
+
+    QNetworkRequest req(QUrl(QString::fromLatin1(BASE_URL) + path));
+    req.setRawHeader("Authorization", QByteArray("Bearer ") + bearerToken.toUtf8());
+
+    QNetworkReply *reply = m_nam.deleteResource(req);
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply, onSuccess]() {
+        const int statusCode =
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+
+        const QByteArray responseBody = reply->readAll();
+
+        const QString qtError =
+                reply->error() == QNetworkReply::NoError ? QString() : reply->errorString();
+        const QString bodyText = QString::fromUtf8(responseBody).trimmed();
+
+        if (reply->error() != QNetworkReply::NoError) {
+            QString msg = QStringLiteral("HTTP %1").arg(statusCode);
+            if (!qtError.isEmpty())
+                msg += QStringLiteral(" | Qt: %1").arg(qtError);
+            if (!bodyText.isEmpty())
+                msg += QStringLiteral(" | Body: %1").arg(bodyText);
+
+            qWarning() << "sendJsonWithToken failed"
+                       << "url=" << reply->url()
+                       << "status=" << statusCode
+                       << "qtError=" << qtError
+                       << "body=" << bodyText;
+
+            setStatus(msg);
+            endRequest();
+            reply->deleteLater();
+            return;
+        }
+
+        QString consentMsg;
+        if (responseRequiresConsent(responseBody, &consentMsg)) {
+            setConsentPending(true);
+            setConsentMessage(consentMsg);
+            setStatus(consentMsg);
+        } else {
+            clearConsentState();
+        }
+
+        onSuccess(responseBody);
+        endRequest();
+        reply->deleteLater();
+    });
+}
+
+QJsonObject StarlingClient::buildPayeeAccountObject(const QString &accountDescription,
+                                                    bool defaultAccount,
+                                                    const QString &countryCode,
+                                                    const QString &accountIdentifier,
+                                                    const QString &bankIdentifier,
+                                                    const QString &bankIdentifierType,
+                                                    const QString &secondaryIdentifier) const
+{
+    QJsonObject obj;
+    obj.insert(QStringLiteral("description"), accountDescription);
+    obj.insert(QStringLiteral("defaultAccount"), defaultAccount);
+    obj.insert(QStringLiteral("countryCode"), countryCode);
+    obj.insert(QStringLiteral("accountIdentifier"), accountIdentifier);
+    obj.insert(QStringLiteral("bankIdentifier"), bankIdentifier);
+    obj.insert(QStringLiteral("bankIdentifierType"), bankIdentifierType);
+
+    if (!secondaryIdentifier.trimmed().isEmpty())
+        obj.insert(QStringLiteral("secondaryIdentifier"), secondaryIdentifier.trimmed());
+
+    return obj;
+}
+
+QJsonObject StarlingClient::buildPayeeObject(const QString &payeeName,
+                                             const QString &phoneNumber,
+                                             const QString &payeeType,
+                                             const QString &firstName,
+                                             const QString &middleName,
+                                             const QString &lastName,
+                                             const QString &businessName,
+                                             const QString &dateOfBirth,
+                                             const QString &accountDescription,
+                                             bool defaultAccount,
+                                             const QString &countryCode,
+                                             const QString &accountIdentifier,
+                                             const QString &bankIdentifier,
+                                             const QString &bankIdentifierType,
+                                             const QString &secondaryIdentifier) const
+{
+    QJsonObject obj;
+    obj.insert(QStringLiteral("payeeName"), payeeName.trimmed());
+    obj.insert(QStringLiteral("payeeType"), payeeType.trimmed());
+
+    if (!phoneNumber.trimmed().isEmpty())
+        obj.insert(QStringLiteral("phoneNumber"), phoneNumber.trimmed());
+    if (!firstName.trimmed().isEmpty())
+        obj.insert(QStringLiteral("firstName"), firstName.trimmed());
+    if (!middleName.trimmed().isEmpty())
+        obj.insert(QStringLiteral("middleName"), middleName.trimmed());
+    if (!lastName.trimmed().isEmpty())
+        obj.insert(QStringLiteral("lastName"), lastName.trimmed());
+    if (!businessName.trimmed().isEmpty())
+        obj.insert(QStringLiteral("businessName"), businessName.trimmed());
+    if (!dateOfBirth.trimmed().isEmpty())
+        obj.insert(QStringLiteral("dateOfBirth"), dateOfBirth.trimmed());
+
+    QJsonArray accounts;
+    accounts.append(buildPayeeAccountObject(accountDescription,
+                                           defaultAccount,
+                                           countryCode,
+                                           accountIdentifier,
+                                           bankIdentifier,
+                                           bankIdentifierType,
+                                           secondaryIdentifier));
+    obj.insert(QStringLiteral("accounts"), accounts);
+
+    return obj;
+}
+
+void StarlingClient::createPayee(const QString &payeeName,
+                                 const QString &phoneNumber,
+                                 const QString &payeeType,
+                                 const QString &firstName,
+                                 const QString &middleName,
+                                 const QString &lastName,
+                                 const QString &businessName,
+                                 const QString &dateOfBirth,
+                                 const QString &accountDescription,
+                                 bool defaultAccount,
+                                 const QString &countryCode,
+                                 const QString &accountIdentifier,
+                                 const QString &bankIdentifier,
+                                 const QString &bankIdentifierType,
+                                 const QString &secondaryIdentifier)
+{
+    const QJsonObject payload = buildPayeeObject(payeeName, phoneNumber, payeeType,
+                                                 firstName, middleName, lastName,
+                                                 businessName, dateOfBirth,
+                                                 accountDescription, defaultAccount,
+                                                 countryCode, accountIdentifier,
+                                                 bankIdentifier, bankIdentifierType,
+                                                 secondaryIdentifier);
+
+    sendJsonWithToken(QStringLiteral("/api/v2/payees"),
+                      QStringLiteral("PUT"),
+                      payload,
+                      m_payeeWriteToken,
+                      [this](const QByteArray &) {
+        setStatus(QStringLiteral("Payee created."));
+        refreshPayees();
+    });
+}
+
+void StarlingClient::createPayeeAccount(const QString &payeeUid,
+                                        const QString &accountDescription,
+                                        bool defaultAccount,
+                                        const QString &countryCode,
+                                        const QString &accountIdentifier,
+                                        const QString &bankIdentifier,
+                                        const QString &bankIdentifierType,
+                                        const QString &secondaryIdentifier)
+{
+    const QString path = QStringLiteral("/api/v2/payees/%1/account").arg(payeeUid);
+    const QJsonObject payload = buildPayeeAccountObject(accountDescription,
+                                                        defaultAccount,
+                                                        countryCode,
+                                                        accountIdentifier,
+                                                        bankIdentifier,
+                                                        bankIdentifierType,
+                                                        secondaryIdentifier);
+
+    sendJsonWithToken(path,
+                      QStringLiteral("PUT"),
+                      payload,
+                      m_payeeWriteToken,
+                      [this, payeeUid](const QByteArray &) {
+        setStatus(QStringLiteral("Payee account created."));
+        refreshPayees();
+        refreshPayeeDetail(payeeUid);
+    });
+}
+
+void StarlingClient::updatePayee(const QString &payeeUid,
+                                 const QString &payeeName,
+                                 const QString &phoneNumber,
+                                 const QString &payeeType,
+                                 const QString &firstName,
+                                 const QString &middleName,
+                                 const QString &lastName,
+                                 const QString &businessName,
+                                 const QString &dateOfBirth,
+                                 const QString &accountDescription,
+                                 bool defaultAccount,
+                                 const QString &countryCode,
+                                 const QString &accountIdentifier,
+                                 const QString &bankIdentifier,
+                                 const QString &bankIdentifierType,
+                                 const QString &secondaryIdentifier)
+{
+    const QString path = QStringLiteral("/api/v2/payees/%1").arg(payeeUid);
+    const QJsonObject payload = buildPayeeObject(payeeName, phoneNumber, payeeType,
+                                                 firstName, middleName, lastName,
+                                                 businessName, dateOfBirth,
+                                                 accountDescription, defaultAccount,
+                                                 countryCode, accountIdentifier,
+                                                 bankIdentifier, bankIdentifierType,
+                                                 secondaryIdentifier);
+
+    sendJsonWithToken(path,
+                      QStringLiteral("PUT"),
+                      payload,
+                      m_token,
+                      [this](const QByteArray &) {
+        if (!m_consentPending)
+            setStatus(QStringLiteral("Payee updated."));
+        refreshPayees();
+    });
+}
+
+void StarlingClient::updatePayeeNames(const QString &payeeUid,
+                                      const QString &payeeName,
+                                      const QString &firstName,
+                                      const QString &middleName,
+                                      const QString &lastName)
+{
+    if (m_token.isEmpty()) {
+        setStatus(QStringLiteral("Main token not loaded."));
+        return;
+    }
+
+    if (payeeUid.trimmed().isEmpty()) {
+        setStatus(QStringLiteral("Missing payee UID."));
+        return;
+    }
+
+    if (m_payeeDetail.isEmpty()) {
+        setStatus(QStringLiteral("Payee details not loaded."));
+        return;
+    }
+
+    const QString detailUid = m_payeeDetail.value(QStringLiteral("payeeUid")).toString();
+    if (detailUid != payeeUid) {
+        setStatus(QStringLiteral("Loaded payee details do not match requested payee."));
+        return;
+    }
+
+    QJsonObject payload;
+    payload.insert(QStringLiteral("payeeName"), payeeName.trimmed());
+    payload.insert(QStringLiteral("payeeType"),
+                   m_payeeDetail.value(QStringLiteral("payeeType")).toString());
+
+    const QString phoneNumber =
+            m_payeeDetail.value(QStringLiteral("phoneNumber")).toString().trimmed();
+    if (!phoneNumber.isEmpty())
+        payload.insert(QStringLiteral("phoneNumber"), phoneNumber);
+
+    const QString payeeType =
+            m_payeeDetail.value(QStringLiteral("payeeType")).toString();
+
+    if (payeeType == QStringLiteral("BUSINESS")) {
+        const QString businessName =
+                m_payeeDetail.value(QStringLiteral("businessName")).toString().trimmed();
+        if (!businessName.isEmpty())
+            payload.insert(QStringLiteral("businessName"), businessName);
+    } else {
+        if (!firstName.trimmed().isEmpty())
+            payload.insert(QStringLiteral("firstName"), firstName.trimmed());
+
+        if (!middleName.trimmed().isEmpty())
+            payload.insert(QStringLiteral("middleName"), middleName.trimmed());
+
+        if (!lastName.trimmed().isEmpty())
+            payload.insert(QStringLiteral("lastName"), lastName.trimmed());
+
+        const QString dateOfBirth =
+                m_payeeDetail.value(QStringLiteral("dateOfBirth")).toString().trimmed();
+        if (!dateOfBirth.isEmpty())
+            payload.insert(QStringLiteral("dateOfBirth"), dateOfBirth);
+    }
+
+    QJsonArray accountsArray;
+    const QVariantList accounts =
+            m_payeeDetail.value(QStringLiteral("accounts")).toList();
+
+    for (const QVariant &accVar : accounts) {
+        const QVariantMap acc = accVar.toMap();
+
+        QJsonObject accObj;
+        accObj.insert(QStringLiteral("description"),
+                      acc.value(QStringLiteral("description")).toString());
+        accObj.insert(QStringLiteral("defaultAccount"),
+                      acc.value(QStringLiteral("defaultAccount")).toBool());
+        accObj.insert(QStringLiteral("countryCode"),
+                      acc.value(QStringLiteral("countryCode")).toString());
+        accObj.insert(QStringLiteral("accountIdentifier"),
+                      acc.value(QStringLiteral("accountIdentifier")).toString());
+
+        QString bankIdentifier =
+                acc.value(QStringLiteral("bankIdentifier")).toString();
+        bankIdentifier.remove('-');   // important if sort code is formatted for display
+        accObj.insert(QStringLiteral("bankIdentifier"), bankIdentifier);
+
+        accObj.insert(QStringLiteral("bankIdentifierType"),
+                      acc.value(QStringLiteral("bankIdentifierType")).toString());
+
+        const QString secondaryIdentifier =
+                acc.value(QStringLiteral("secondaryIdentifier")).toString().trimmed();
+        if (!secondaryIdentifier.isEmpty())
+            accObj.insert(QStringLiteral("secondaryIdentifier"), secondaryIdentifier);
+
+        accountsArray.append(accObj);
+    }
+
+    if (accountsArray.isEmpty()) {
+        setStatus(QStringLiteral("Cannot update payee without at least one account."));
+        return;
+    }
+
+    payload.insert(QStringLiteral("accounts"), accountsArray);
+
+    const QString path = QStringLiteral("/api/v2/payees/%1").arg(payeeUid);
+
+    sendJsonWithToken(path,
+                      QStringLiteral("PUT"),
+                      payload,
+                      m_token,
+                      [this, payeeUid](const QByteArray &) {
+        if (!m_consentPending)
+            setStatus(QStringLiteral("Payee updated."));
+        refreshPayees();
+        refreshPayeeDetail(payeeUid);
+    });
+}
+
+void StarlingClient::deletePayee(const QString &payeeUid)
+{
+
+    if (m_token.isEmpty()) {
+        setStatus(QStringLiteral("Main token not loaded."));
+        return;
+    }
+
+    const QString path = QStringLiteral("/api/v2/payees/%1").arg(payeeUid);
+
+    sendDeleteWithToken(path,
+                        m_token,
+                        [this, payeeUid](const QByteArray &) {
+        if (!m_consentPending)
+            setStatus(QStringLiteral("Payee deleted."));
+        refreshPayees();
+        clearPayeeDetail();
+        emit payeeDeleted(payeeUid);
+    });
+}
+
+void StarlingClient::updatePayeeAccountDescription(const QString &payeeUid,
+                                                   const QString &payeeAccountUid,
+                                                   const QString &description)
+{
+    if (m_token.isEmpty()) {
+        setStatus(QStringLiteral("Main token not loaded."));
+        return;
+    }
+
+    if (payeeUid.trimmed().isEmpty() || payeeAccountUid.trimmed().isEmpty()) {
+        setStatus(QStringLiteral("Missing payee or account UID."));
+        return;
+    }
+
+    if (m_payeeDetail.isEmpty()) {
+        setStatus(QStringLiteral("Payee details not loaded."));
+        return;
+    }
+
+    const QString detailUid = m_payeeDetail.value(QStringLiteral("payeeUid")).toString();
+    if (detailUid != payeeUid) {
+        setStatus(QStringLiteral("Loaded payee details do not match requested payee."));
+        return;
+    }
+
+    QJsonObject payload;
+    payload.insert(QStringLiteral("payeeName"),
+                   m_payeeDetail.value(QStringLiteral("payeeName")).toString().trimmed());
+    payload.insert(QStringLiteral("payeeType"),
+                   m_payeeDetail.value(QStringLiteral("payeeType")).toString());
+
+    const QString phoneNumber =
+            m_payeeDetail.value(QStringLiteral("phoneNumber")).toString().trimmed();
+    if (!phoneNumber.isEmpty())
+        payload.insert(QStringLiteral("phoneNumber"), phoneNumber);
+
+    const QString payeeType =
+            m_payeeDetail.value(QStringLiteral("payeeType")).toString();
+
+    if (payeeType == QStringLiteral("BUSINESS")) {
+        const QString businessName =
+                m_payeeDetail.value(QStringLiteral("businessName")).toString().trimmed();
+        if (!businessName.isEmpty())
+            payload.insert(QStringLiteral("businessName"), businessName);
+    } else {
+        const QString firstName =
+                m_payeeDetail.value(QStringLiteral("firstName")).toString().trimmed();
+        const QString middleName =
+                m_payeeDetail.value(QStringLiteral("middleName")).toString().trimmed();
+        const QString lastName =
+                m_payeeDetail.value(QStringLiteral("lastName")).toString().trimmed();
+        const QString dateOfBirth =
+                m_payeeDetail.value(QStringLiteral("dateOfBirth")).toString().trimmed();
+
+        if (!firstName.isEmpty())
+            payload.insert(QStringLiteral("firstName"), firstName);
+        if (!middleName.isEmpty())
+            payload.insert(QStringLiteral("middleName"), middleName);
+        if (!lastName.isEmpty())
+            payload.insert(QStringLiteral("lastName"), lastName);
+        if (!dateOfBirth.isEmpty())
+            payload.insert(QStringLiteral("dateOfBirth"), dateOfBirth);
+    }
+
+    QJsonArray accountsArray;
+    const QVariantList accounts =
+            m_payeeDetail.value(QStringLiteral("accounts")).toList();
+
+    bool foundTarget = false;
+
+    for (const QVariant &accVar : accounts) {
+        const QVariantMap acc = accVar.toMap();
+        const QString currentUid =
+                acc.value(QStringLiteral("payeeAccountUid")).toString();
+
+        QJsonObject accObj;
+        accObj.insert(QStringLiteral("description"),
+                      currentUid == payeeAccountUid
+                          ? description.trimmed()
+                          : acc.value(QStringLiteral("description")).toString());
+
+        accObj.insert(QStringLiteral("defaultAccount"),
+                      acc.value(QStringLiteral("defaultAccount")).toBool());
+        accObj.insert(QStringLiteral("countryCode"),
+                      acc.value(QStringLiteral("countryCode")).toString());
+        accObj.insert(QStringLiteral("accountIdentifier"),
+                      acc.value(QStringLiteral("accountIdentifier")).toString());
+
+        QString bankIdentifier =
+                acc.value(QStringLiteral("bankIdentifier")).toString();
+        bankIdentifier.remove('-');
+        accObj.insert(QStringLiteral("bankIdentifier"), bankIdentifier);
+
+        accObj.insert(QStringLiteral("bankIdentifierType"),
+                      acc.value(QStringLiteral("bankIdentifierType")).toString());
+
+        const QString secondaryIdentifier =
+                acc.value(QStringLiteral("secondaryIdentifier")).toString().trimmed();
+        if (!secondaryIdentifier.isEmpty())
+            accObj.insert(QStringLiteral("secondaryIdentifier"), secondaryIdentifier);
+
+        accountsArray.append(accObj);
+
+        if (currentUid == payeeAccountUid)
+            foundTarget = true;
+    }
+
+    if (!foundTarget) {
+        setStatus(QStringLiteral("Target payee account not found."));
+        return;
+    }
+
+    if (accountsArray.isEmpty()) {
+        setStatus(QStringLiteral("Cannot update payee without at least one account."));
+        return;
+    }
+
+    payload.insert(QStringLiteral("accounts"), accountsArray);
+
+    const QString path = QStringLiteral("/api/v2/payees/%1").arg(payeeUid);
+
+    sendJsonWithToken(path,
+                      QStringLiteral("PUT"),
+                      payload,
+                      m_token,
+                      [this, payeeUid](const QByteArray &) {
+        if (!m_consentPending)
+            setStatus(QStringLiteral("Payee account updated."));
+        refreshPayees();
+        refreshPayeeDetail(payeeUid);
+    });
+}
+
+void StarlingClient::deletePayeeAccount(const QString &payeeUid, const QString &accountUid)
+{
+    if (m_token.isEmpty()) {
+        setStatus(QStringLiteral("Main token not loaded."));
+        return;
+    }
+
+    const QString path = QStringLiteral("/api/v2/payees/%1/account/%2")
+            .arg(payeeUid, accountUid);
+
+    sendDeleteWithToken(path,
+                        m_token,
+                        [this, payeeUid](const QByteArray &) {
+        setStatus(QStringLiteral("Payee account deleted."));
+        refreshPayees();
+        refreshPayeeDetail(payeeUid);
+    });
+}
+
+void StarlingClient::refreshSourceAccountIdentifiers(const QString &accountUid)
+{
+    if (accountUid.trimmed().isEmpty())
+        return;
+
+    const QString identifiersPath =
+            QString("/api/v2/accounts/%1/identifiers").arg(accountUid);
+
+    getJson(identifiersPath, [this, accountUid](const QByteArray &idBody) {
+        const QJsonDocument idDoc = QJsonDocument::fromJson(idBody);
+        const QJsonObject idRoot = idDoc.object();
+
+        QString accountNumber = idRoot.value("accountIdentifier").toString();
+        QString sortCode = idRoot.value("bankIdentifier").toString();
+
+        const QJsonArray ids = idRoot.value("accountIdentifiers").toArray();
+        for (int i = 0; i < ids.size(); ++i) {
+            const QJsonObject obj = ids.at(i).toObject();
+            const QString type = obj.value("identifierType").toString();
+            const QString bankId = obj.value("bankIdentifier").toString();
+            const QString acctId = obj.value("accountIdentifier").toString();
+
+            if (type == "SORT_CODE") {
+                if (!bankId.isEmpty())
+                    sortCode = bankId;
+                if (!acctId.isEmpty())
+                    accountNumber = acctId;
+            }
+        }
+
+        const QString formattedSortCode = formatSortCode(sortCode);
+
+        bool changed = false;
+        for (int i = 0; i < m_sourceAccounts.size(); ++i) {
+            QVariantMap row = m_sourceAccounts.at(i).toMap();
+            if (row.value(QStringLiteral("accountUid")).toString() == accountUid) {
+                row.insert(QStringLiteral("accountNumber"), accountNumber);
+                row.insert(QStringLiteral("sortCode"), formattedSortCode);
+                m_sourceAccounts[i] = row;
+                changed = true;
+                break;
+            }
+        }
+
+        if (changed)
+            emit sourceAccountsChanged();
+
+        if (accountUid == m_accountUid) {
+            m_accountNumber = accountNumber;
+            m_sortCode = formattedSortCode;
+            emit accountChanged();
+        }
+    });
+}
+
+void StarlingClient::setNavigationTarget(const QString &target)
+{
+    if (m_navigationTarget == target)
+        return;
+
+    m_navigationTarget = target;
+    emit navigationTargetChanged();
+}
+
+void StarlingClient::clearNavigationTarget()
+{
+    setNavigationTarget(QString());
+}
+
+void StarlingClient::requestOpenSettings()
+{
+    if (m_locked) {
+        m_pendingAction = QStringLiteral("openSettings");
+        unlock();
+        return;
+    }
+
+    setNavigationTarget(QStringLiteral("Settings"));
+}
+
+QVariantList StarlingClient::transactionRows() const
+{
+    return m_transactionRows;
+}
+
+void StarlingClient::beginRequest()
+{
+    ++m_pendingRequests;
+    setBusy(m_pendingRequests > 0);
+}
+
+void StarlingClient::lock()
+{
+    if (m_token.isEmpty() && m_locked)
+        return;
+
+    setToken(QString());
+    setLocked(true);
+
+    setInitializing(false);
+    m_pendingRequests = 0;
+    setBusy(false);
+
+    clearTransactions();
+    clearPayees();
+    clearPayeeDetail();
+    clearCards();
+    setPayeeWriteToken(QString());
+    setApiKeyId(QString());
+    setPrivateApiKeyPem(QString());
+
+    m_availableBalance.clear();
+    m_clearedBalance.clear();
+    m_currency.clear();
+    emit balanceChanged();
+    clearConsentState();
+
+    setPinError(QString());
+    setPinPromptVisible(false);
+
+    setStatus(QStringLiteral("Locked."));
+    stopRelockTimer();
+}
+
+void StarlingClient::continuePendingAction()
+{
+    const QString action = m_pendingAction;
+    m_pendingAction.clear();
+
+    if (action == QStringLiteral("refreshAll")) {
+        refreshAll(m_startupDaysBack);
+        return;
+    }
+
+    if (action == QStringLiteral("openSettings")) {
+        setNavigationTarget(QStringLiteral("Settings"));
+        return;
+    }
+}
+
+void StarlingClient::startRelockTimer()
+{
+    if (m_locked)
+        return;
+
+    m_relockTimer.start(m_autoLockMinutes * 60 * 1000);
+}
+
+void StarlingClient::registerUserActivity()
+{
+    if (m_locked)
+        return;
+
+    startRelockTimer();
+}
+
+void StarlingClient::stopRelockTimer()
+{
+    m_relockTimer.stop();
+}
+
+void StarlingClient::performUnlock()
+{
+    const QString storedToken = m_tokenStore.loadToken();
+
+    if (storedToken.isEmpty()) {
+        setLocked(false);
+        setStatus(QStringLiteral("No Personal Access Token saved."));
+        return;
+    }
+
+    setToken(storedToken);
+    setPayeeWriteToken(m_tokenStore.loadPayeeWriteToken());
+    setApiKeyId(m_tokenStore.loadApiKeyId());
+    setPrivateApiKeyPem(m_tokenStore.loadPrivateApiKeyPem());
+
+    setLocked(false);
+    setStatus(QStringLiteral("Unlocked."));
+    startRelockTimer();
+
+    if (!m_pendingAction.isEmpty()) {
+        continuePendingAction();
+    } else {
+        refreshAll(m_startupDaysBack);
+    }
+}
+
+void StarlingClient::unlock()
+{
+    if (pinEnabled()) {
+        setPinError(QString());
+        setPinPromptVisible(true);
+        return;
+    }
+
+    performUnlock();
+}
+
+bool StarlingClient::submitPin(const QString &pin)
+{
+    if (!pinEnabled()) {
+        performUnlock();
+        return true;
+    }
+
+    if (!verifyPinValue(pin.trimmed())) {
+        setPinError(QStringLiteral("Incorrect PIN."));
+        return false;
+    }
+
+    setPinError(QString());
+    setPinPromptVisible(false);
+
+    if (m_pinConfirmationPending) {
+        clearPinConfirmation();
+        emit pinConfirmed();
+        return true;
+    }
+
+    performUnlock();
+    return true;
+}
+
+bool StarlingClient::changeAppPinAfterConfirmation(const QString &newPin,
+                                                   const QString &confirmPin)
+{
+    if (!pinEnabled()) {
+        setPinSettingsError(QStringLiteral("No app PIN is enabled."));
+        return false;
+    }
+
+    QString error;
+    if (!validateNewPin(newPin, confirmPin, &error)) {
+        setPinSettingsError(error);
+        return false;
+    }
+
+    m_pinSalt = QUuid::createUuid().toString().remove('{').remove('}');
+    m_pinHash = hashPin(newPin.trimmed(), m_pinSalt);
+
+    QSettings settings;
+    settings.setValue(QStringLiteral("security/pinSalt"), m_pinSalt);
+    settings.setValue(QStringLiteral("security/pinHash"), m_pinHash);
+
+    setPinSettingsError(QString());
+    setStatus(QStringLiteral("App PIN changed."));
+    return true;
+}
+
+void StarlingClient::cancelPinPrompt()
+{
+    setPinError(QString());
+    setPinPromptVisible(false);
+    clearPinConfirmation();
+}
+
+bool StarlingClient::setAppPin(const QString &pin, const QString &confirmPin)
+{
+    QString error;
+    if (!validateNewPin(pin, confirmPin, &error)) {
+        setPinSettingsError(error);
+        return false;
+    }
+
+    const bool wasEnabled = pinEnabled();
+
+    m_pinSalt = QUuid::createUuid().toString().remove('{').remove('}');
+    m_pinHash = hashPin(pin.trimmed(), m_pinSalt);
+
+    QSettings settings;
+    settings.setValue(QStringLiteral("security/pinSalt"), m_pinSalt);
+    settings.setValue(QStringLiteral("security/pinHash"), m_pinHash);
+
+    if (!wasEnabled)
+        emit pinEnabledChanged();
+
+    setPinSettingsError(QStringLiteral("App PIN enabled."));
+    emit pinEnabledChanged();
+    emit pinSetupRequiredChanged();
+    return true;
+}
+
+bool StarlingClient::changeAppPin(const QString &currentPin,
+                                  const QString &newPin,
+                                  const QString &confirmPin)
+{
+    if (!pinEnabled()) {
+        setPinSettingsError(QStringLiteral("No app PIN is enabled."));
+        return false;
+    }
+
+    if (!verifyPinValue(currentPin.trimmed())) {
+        setPinSettingsError(QStringLiteral("Current PIN is incorrect."));
+        return false;
+    }
+
+    QString error;
+    if (!validateNewPin(newPin, confirmPin, &error)) {
+        setPinSettingsError(error);
+        return false;
+    }
+
+    m_pinSalt = QUuid::createUuid().toString().remove('{').remove('}');
+    m_pinHash = hashPin(newPin.trimmed(), m_pinSalt);
+
+    QSettings settings;
+    settings.setValue(QStringLiteral("security/pinSalt"), m_pinSalt);
+    settings.setValue(QStringLiteral("security/pinHash"), m_pinHash);
+
+    setPinSettingsError(QStringLiteral("App PIN changed."));
+    return true;
+}
+
+void StarlingClient::clearPinError()
+{
+    setPinError(QString());
+}
+
+QString StarlingClient::pinSettingsError() const
+{
+    return m_pinSettingsError;
+}
+
+void StarlingClient::setPinSettingsError(const QString &value)
+{
+    if (m_pinSettingsError == value)
+        return;
+
+    m_pinSettingsError = value;
+    emit pinSettingsErrorChanged();
+}
+
+void StarlingClient::clearPinSettingsError()
+{
+    setPinSettingsError(QString());
+}
+
+bool StarlingClient::pinSetupRequired() const
+{
+    return !pinEnabled();
+}
+
+void StarlingClient::refreshAll(int daysBack)
+{
+    m_startupDaysBack = daysBack;
+
+    if (m_locked || m_token.isEmpty()) {
+        m_pendingAction = QStringLiteral("refreshAll");
+        unlock();
+        return;
+    }
+
+    if (!m_online) {
+        setStatus(QStringLiteral("No internet connection."));
+        setInitializing(false);
+        setBusy(false);
+        return;
+    }
+
+    setInitializing(true);
+    setStatus(QStringLiteral("Loading account..."));
+
+    // stage 1
+    discoverAccount();
+}
+
+void StarlingClient::endRequest()
+{
+    if (m_pendingRequests > 0)
+        --m_pendingRequests;
+
+    setBusy(m_pendingRequests > 0);
+
+    if (m_initializing && m_pendingRequests == 0) {
+        setInitializing(false);
+
+        if (!m_accountUid.isEmpty() && !m_categoryUid.isEmpty())
+            setStatus(QStringLiteral("Ready."));
+    }
+}
+
+void StarlingClient::setInitializing(bool value)
+{
+    if (m_initializing == value)
+        return;
+
+    m_initializing = value;
+    emit initializingChanged();
+}
+
+void StarlingClient::resetLoadedData()
+{
+    m_accountUid.clear();
+    m_categoryUid.clear();
+    m_availableBalance.clear();
+    m_clearedBalance.clear();
+    m_currency.clear();
+    m_transactionRows.clear();
+    m_lastUpdated.clear();
+
+    m_accountHolderName.clear();
+    m_accountName.clear();
+    m_accountNumber.clear();
+    m_sortCode.clear();
+    m_accountType.clear();
+    m_email.clear();
+    m_phone.clear();
+    m_postalAddress.clear();
+    m_countryCode.clear();
+    m_sourceAccounts.clear();
+
+    emit accountChanged();
+    emit balanceChanged();
+    emit transactionsChanged();
+    emit lastUpdatedChanged();
+    emit sourceAccountsChanged();
+}
+
+void StarlingClient::initialize(int daysBack)
+{
+    if (m_token.isEmpty()) {
+        setStatus(QStringLiteral("Missing token."));
+        return;
+    }
+
+    if (!m_online) {
+        m_startupDaysBack = daysBack;
+        m_pendingRequests = 0;
+        setBusy(false);
+        setInitializing(false);
+        setStatus(QStringLiteral("No internet connection."));
+        return;
+    }
+
+    m_startupDaysBack = daysBack;
+    m_pendingRequests = 0;
+    setBusy(false);
+    setInitializing(true);
+    setStatus(QStringLiteral("Loading account..."));
+
+    resetLoadedData();
+    discoverAccount();
+}
+
+QVariantList StarlingClient::recentTransactions() const
+{
+    QVariantList out;
+    for (int i = 0; i < m_transactionRows.size(); ++i) {
+        const QVariantMap row = m_transactionRows.at(i).toMap();
+        if (row.value("rowType").toString() != QStringLiteral("transaction"))
+            continue;
+        out.append(row);
+        if (out.size() >= 3)
+            break;
+    }
+    return out;
+}
+
+QString StarlingClient::lastUpdated() const
+{
+    return m_lastUpdated;
+}
+
+QString StarlingClient::accountHolderName() const
+{
+    return m_accountHolderName;
+}
+
+QString StarlingClient::accountName() const
+{
+    return m_accountName;
+}
+
+QString StarlingClient::accountNumber() const
+{
+    return m_accountNumber;
+}
+
+QString StarlingClient::sortCode() const
+{
+    return m_sortCode;
+}
+
+QString StarlingClient::accountType() const
+{
+    return m_accountType;
+}
+
+QString StarlingClient::email() const
+{
+    return m_email;
+}
+
+QString StarlingClient::phone() const
+{
+    return m_phone;
+}
+
+QString StarlingClient::postalAddress() const
+{
+    return m_postalAddress;
+}
+
+QString StarlingClient::countryCode() const
+{
+    return m_countryCode;
+}
+
+// Network
+bool StarlingClient::online() const
+{
+    return m_online;
+}
+
+void StarlingClient::setOnline(bool value)
+{
+    if (m_online == value)
+        return;
+
+    m_online = value;
+    emit onlineChanged();
+}
+
+void StarlingClient::setBusy(bool value)
+{
+    if (m_busy == value)
+        return;
+
+    m_busy = value;
+    emit busyChanged();
+}
+
+void StarlingClient::setStatus(const QString &value)
+{
+    if (m_status == value)
+        return;
+
+    m_status = value;
+    emit statusChanged();
+}
+
+void StarlingClient::clearCards()
+{
+    if (m_cards.isEmpty())
+        return;
+
+    m_cards.clear();
+    emit cardsChanged();
+}
+
+void StarlingClient::clearTransactions()
+{
+    if (m_transactionRows.isEmpty())
+        return;
+
+    m_transactionRows.clear();
+    emit transactionsChanged();
+}
+
+void StarlingClient::clearPayees()
+{
+    if (m_payees.isEmpty())
+        return;
+
+    m_payees.clear();
+    emit payeesChanged();
+}
+
+void StarlingClient::touchLastUpdated()
+{
+    const QString value = QDateTime::currentDateTime().toString("dd MMM yyyy hh:mm");
+    if (m_lastUpdated == value)
+        return;
+
+    m_lastUpdated = value;
+    emit lastUpdatedChanged();
+}
+
+void StarlingClient::saveToken()
+{
+    if (!m_tokenStore.saveToken(m_token)) {
+        setStatus(QString("Failed to save token: %1").arg(m_tokenStore.lastError()));
+        return;
+    }
+
+    setLocked(false);
+    setStatus(QStringLiteral("Token saved securely."));
+    refreshAll(m_startupDaysBack);
+}
+
+void StarlingClient::loadToken()
+{
+    const QString storedToken = m_tokenStore.loadToken();
+
+    if (storedToken.isEmpty() && !m_tokenStore.lastError().isEmpty()) {
+        setStatus(QString("Failed to load token: %1").arg(m_tokenStore.lastError()));
+        return;
+    }
+
+    setToken(storedToken);
+}
+
+void StarlingClient::clearToken()
+{
+    if (!m_tokenStore.clearToken()) {
+        setStatus(QString("Failed to clear token: %1").arg(m_tokenStore.lastError()));
+        return;
+    }
+
+    setToken(QString());
+
+    // End the authenticated session data, but do not hard-lock the app.
+    resetLoadedData();
+    clearTransactions();
+    clearPayees();
+    clearPayeeDetail();
+    clearCards();
+    clearConsentState();
+    clearPaymentDraft();
+    clearPaymentResult();
+
+    setStatus(QStringLiteral("Personal Access Token cleared."));
+}
+
+void StarlingClient::refreshCards()
+{
+    const QString path = QStringLiteral("/api/v2/cards");
+
+    getJson(path, [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+        const QJsonArray cardsArray = root.value(QStringLiteral("cards")).toArray();
+
+        QVariantList rows;
+        rows.reserve(cardsArray.size());
+
+        for (int i = 0; i < cardsArray.size(); ++i) {
+            const QJsonObject obj = cardsArray.at(i).toObject();
+
+            QVariantMap row;
+            row.insert(QStringLiteral("cardUid"), obj.value(QStringLiteral("cardUid")).toString());
+            row.insert(QStringLiteral("publicToken"), obj.value(QStringLiteral("publicToken")).toString());
+            row.insert(QStringLiteral("enabled"), obj.value(QStringLiteral("enabled")).toBool());
+            row.insert(QStringLiteral("walletNotificationEnabled"), obj.value(QStringLiteral("walletNotificationEnabled")).toBool());
+            row.insert(QStringLiteral("posEnabled"), obj.value(QStringLiteral("posEnabled")).toBool());
+            row.insert(QStringLiteral("atmEnabled"), obj.value(QStringLiteral("atmEnabled")).toBool());
+            row.insert(QStringLiteral("onlineEnabled"), obj.value(QStringLiteral("onlineEnabled")).toBool());
+            row.insert(QStringLiteral("mobileWalletEnabled"), obj.value(QStringLiteral("mobileWalletEnabled")).toBool());
+            row.insert(QStringLiteral("gamblingEnabled"), obj.value(QStringLiteral("gamblingEnabled")).toBool());
+            row.insert(QStringLiteral("magStripeEnabled"), obj.value(QStringLiteral("magStripeEnabled")).toBool());
+            row.insert(QStringLiteral("cancelled"), obj.value(QStringLiteral("cancelled")).toBool());
+            row.insert(QStringLiteral("activationRequested"), obj.value(QStringLiteral("activationRequested")).toBool());
+            row.insert(QStringLiteral("activated"), obj.value(QStringLiteral("activated")).toBool());
+            row.insert(QStringLiteral("endOfCardNumber"), obj.value(QStringLiteral("endOfCardNumber")).toString());
+            row.insert(QStringLiteral("cardAssociationUid"), obj.value(QStringLiteral("cardAssociationUid")).toString());
+            row.insert(QStringLiteral("gamblingToBeEnabledAt"), obj.value(QStringLiteral("gamblingToBeEnabledAt")).toString());
+
+            const QJsonArray currencyFlags = obj.value(QStringLiteral("currencyFlags")).toArray();
+            QVariantList currencyRows;
+            QStringList enabledCurrencies;
+            QStringList disabledCurrencies;
+
+            for (int j = 0; j < currencyFlags.size(); ++j) {
+                const QJsonObject cf = currencyFlags.at(j).toObject();
+                const QString currency = cf.value(QStringLiteral("currency")).toString();
+                const bool enabled = cf.value(QStringLiteral("enabled")).toBool();
+
+                QVariantMap cfRow;
+                cfRow.insert(QStringLiteral("currency"), currency);
+                cfRow.insert(QStringLiteral("enabled"), enabled);
+                currencyRows.append(cfRow);
+
+                if (enabled)
+                    enabledCurrencies << currency;
+                else
+                    disabledCurrencies << currency;
+            }
+
+            row.insert(QStringLiteral("currencyFlags"), currencyRows);
+            row.insert(QStringLiteral("enabledCurrencies"), enabledCurrencies.join(QStringLiteral(", ")));
+            row.insert(QStringLiteral("disabledCurrencies"), disabledCurrencies.join(QStringLiteral(", ")));
+
+            QString title = QStringLiteral("Card");
+            const QString ending = obj.value(QStringLiteral("endOfCardNumber")).toString().trimmed();
+            if (!ending.isEmpty())
+                title = QStringLiteral("Card ending %1").arg(ending);
+
+            QString subtitle;
+            if (obj.value(QStringLiteral("cancelled")).toBool()) {
+                subtitle = QStringLiteral("Cancelled");
+            } else if (!obj.value(QStringLiteral("enabled")).toBool()) {
+                subtitle = QStringLiteral("Disabled");
+            } else if (obj.value(QStringLiteral("activated")).toBool()) {
+                subtitle = QStringLiteral("Active");
+            } else if (obj.value(QStringLiteral("activationRequested")).toBool()) {
+                subtitle = QStringLiteral("Activation requested");
+            } else {
+                subtitle = QStringLiteral("Available");
+            }
+
+            row.insert(QStringLiteral("title"), title);
+            row.insert(QStringLiteral("subtitle"), subtitle);
+
+            rows.append(row);
+        }
+
+        std::sort(rows.begin(), rows.end(), [](const QVariant &a, const QVariant &b) {
+            const QString ae = a.toMap().value(QStringLiteral("endOfCardNumber")).toString();
+            const QString be = b.toMap().value(QStringLiteral("endOfCardNumber")).toString();
+            return ae < be;
+        });
+
+        m_cards = rows;
+        emit cardsChanged();
+        setStatus(QStringLiteral("Loaded %1 card(s).").arg(rows.size()));
+
+        setInitializing(false);
+        if (!m_accountUid.isEmpty()) {
+            getJson("/api/v2/account-holder/name", [this](const QByteArray &nameBody) {
+                const QJsonDocument nameDoc = QJsonDocument::fromJson(nameBody);
+                const QJsonObject nameRoot = nameDoc.object();
+                m_accountHolderName = nameRoot.value("accountHolderName").toString();
+
+                if (m_accountHolderName.isEmpty())
+                    m_accountHolderName = m_accountName;
+
+                emit accountChanged();
+            });
+
+            getJson("/api/v2/account-holder/individual", [this](const QByteArray &indBody) {
+                const QJsonDocument indDoc = QJsonDocument::fromJson(indBody);
+                const QJsonObject indRoot = indDoc.object();
+
+                if (m_accountHolderName.isEmpty()) {
+                    const QString firstName = indRoot.value("firstName").toString();
+                    const QString lastName = indRoot.value("lastName").toString();
+                    const QString fullName = (firstName + " " + lastName).trimmed();
+                    if (!fullName.isEmpty())
+                        m_accountHolderName = fullName;
+                }
+
+                m_email = indRoot.value("email").toString();
+                m_phone = indRoot.value("phone").toString();
+
+                emit accountChanged();
+            });
+
+            getJson("/api/v2/addresses", [this](const QByteArray &addrBody) {
+                const QJsonDocument addrDoc = QJsonDocument::fromJson(addrBody);
+                const QJsonObject addrRoot = addrDoc.object();
+                const QJsonObject current = addrRoot.value("current").toObject();
+
+                const QString line1 = current.value("line1").toString();
+                const QString line2 = current.value("line2").toString();
+                const QString line3 = current.value("line3").toString();
+                const QString postTown = current.value("postTown").toString();
+                const QString postCode = current.value("postCode").toString();
+                const QString cc = current.value("countryCode").toString();
+
+                m_countryCode = cc;
+                m_postalAddress = buildPostalAddress(line1, line2, line3, postTown, postCode, cc);
+
+                emit accountChanged();
+            });
+
+            const QString identifiersPath =
+                    QString("/api/v2/accounts/%1/identifiers").arg(m_accountUid);
+
+            getJson(identifiersPath, [this](const QByteArray &idBody) {
+                const QJsonDocument idDoc = QJsonDocument::fromJson(idBody);
+                const QJsonObject idRoot = idDoc.object();
+
+                QString accountNumber = idRoot.value("accountIdentifier").toString();
+                QString sortCode = idRoot.value("bankIdentifier").toString();
+
+                const QJsonArray ids = idRoot.value("accountIdentifiers").toArray();
+                for (int i = 0; i < ids.size(); ++i) {
+                    const QJsonObject obj = ids.at(i).toObject();
+                    const QString type = obj.value("identifierType").toString();
+                    const QString bankId = obj.value("bankIdentifier").toString();
+                    const QString acctId = obj.value("accountIdentifier").toString();
+
+                    if (type == "SORT_CODE") {
+                        if (!bankId.isEmpty())
+                            sortCode = bankId;
+                        if (!acctId.isEmpty())
+                            accountNumber = acctId;
+                    }
+                }
+
+                m_accountNumber = accountNumber;
+                m_sortCode = formatSortCode(sortCode);
+
+                emit accountChanged();
+            });
+        }
+        setStatus(QStringLiteral("Ready."));
+        startRelockTimer();
+    });
+}
+
+void StarlingClient::refreshPayees()
+{
+    const QString path = QStringLiteral("/api/v2/payees");
+
+    getJson(path, [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+        const QJsonArray payeesArray = root.value("payees").toArray();
+
+        QVariantList rows;
+        rows.reserve(payeesArray.size());
+
+        for (int i = 0; i < payeesArray.size(); ++i) {
+            const QJsonObject payeeObj = payeesArray.at(i).toObject();
+
+            QVariantMap row;
+            row.insert(QStringLiteral("payeeUid"), payeeObj.value("payeeUid").toString());
+            QString payeeName = payeeObj.value(QStringLiteral("payeeName")).toString().trimmed();
+
+            if (payeeName.isEmpty()) {
+                payeeName = payeeObj.value(QStringLiteral("businessName")).toString().trimmed();
+            }
+
+            if (payeeName.isEmpty()) {
+                const QString firstName = payeeObj.value(QStringLiteral("firstName")).toString().trimmed();
+                const QString middleName = payeeObj.value(QStringLiteral("middleName")).toString().trimmed();
+                const QString lastName = payeeObj.value(QStringLiteral("lastName")).toString().trimmed();
+
+                QStringList parts;
+                if (!firstName.isEmpty())
+                    parts.append(firstName);
+                if (!middleName.isEmpty())
+                    parts.append(middleName);
+                if (!lastName.isEmpty())
+                    parts.append(lastName);
+
+                payeeName = parts.join(QStringLiteral(" "));
+            }
+
+            if (payeeName.isEmpty()) {
+                payeeName = QStringLiteral("Unnamed payee");
+            }
+
+            row.insert(QStringLiteral("name"), payeeName);
+
+            const QJsonArray accounts = payeeObj.value("accounts").toArray();
+
+            QVariantList accountRows;
+            QString subtitle;
+            QString firstAccountIdentifier;
+            QString firstBankIdentifier;
+
+            for (int j = 0; j < accounts.size(); ++j) {
+                const QJsonObject accObj = accounts.at(j).toObject();
+
+                const QString accountIdentifier = accObj.value("accountIdentifier").toString();
+                const QString bankIdentifier = accObj.value("bankIdentifier").toString();
+                const QString bic = accObj.value("bic").toString();
+
+                QVariantMap accountRow;
+                accountRow.insert(QStringLiteral("accountIdentifier"), accountIdentifier);
+                accountRow.insert(QStringLiteral("bankIdentifier"), formatSortCode(bankIdentifier));
+                accountRow.insert(QStringLiteral("bic"), bic);
+                accountRows.append(accountRow);
+
+                if (j == 0) {
+                    firstAccountIdentifier = accountIdentifier;
+                    firstBankIdentifier = formatSortCode(bankIdentifier);
+                }
+            }
+
+            if (!firstAccountIdentifier.isEmpty() && !firstBankIdentifier.isEmpty()) {
+                subtitle = QStringLiteral("%1  •  %2")
+                               .arg(firstAccountIdentifier, firstBankIdentifier);
+            } else if (!firstAccountIdentifier.isEmpty()) {
+                subtitle = firstAccountIdentifier;
+            } else if (!firstBankIdentifier.isEmpty()) {
+                subtitle = firstBankIdentifier;
+            } else {
+                subtitle = QStringLiteral("No account details");
+            }
+
+            row.insert(QStringLiteral("subtitle"), subtitle);
+            row.insert(QStringLiteral("accounts"), accountRows);
+            row.insert(QStringLiteral("accountCount"), accounts.size());
+
+            rows.append(row);
+        }
+
+        std::sort(rows.begin(), rows.end(), [](const QVariant &a, const QVariant &b) {
+            const QString an = a.toMap().value(QStringLiteral("name")).toString().toLower();
+            const QString bn = b.toMap().value(QStringLiteral("name")).toString().toLower();
+            return an < bn;
+        });
+
+        m_payees = rows;
+        emit payeesChanged();
+        m_lastUpdated = QDateTime::currentDateTime()
+                            .toString(Qt::DefaultLocaleShortDate);
+        emit lastUpdatedChanged();
+
+        setStatus(QStringLiteral("Loaded %1 payee(s).").arg(rows.size()));
+
+        setStatus(QStringLiteral("Loading cards..."));
+        refreshCards();
+    });
+}
+
+void StarlingClient::setCardBooleanControl(const QString &path,
+                                           bool enabled,
+                                           const QString &successStatus)
+{
+    if (m_token.isEmpty()) {
+        setStatus(QStringLiteral("Main token not loaded."));
+        return;
+    }
+
+    QJsonObject payload;
+    payload.insert(QStringLiteral("enabled"), enabled);
+
+    sendJsonWithToken(path,
+                      QStringLiteral("PUT"),
+                      payload,
+                      m_token,
+                      [this, successStatus](const QByteArray &) {
+        setStatus(successStatus);
+        refreshCards();
+    });
+}
+
+void StarlingClient::setCardEnabled(const QString &cardUid, bool enabled)
+{
+    const QString path = QStringLiteral("/api/v2/cards/%1/controls/enabled").arg(cardUid);
+    setCardBooleanControl(path, enabled, QStringLiteral("Card enabled state updated."));
+}
+
+void StarlingClient::setCardAtmEnabled(const QString &cardUid, bool enabled)
+{
+    const QString path = QStringLiteral("/api/v2/cards/%1/controls/atm-enabled").arg(cardUid);
+    setCardBooleanControl(path, enabled, QStringLiteral("ATM control updated."));
+}
+
+void StarlingClient::setCardPosEnabled(const QString &cardUid, bool enabled)
+{
+    const QString path = QStringLiteral("/api/v2/cards/%1/controls/pos-enabled").arg(cardUid);
+    setCardBooleanControl(path, enabled, QStringLiteral("POS control updated."));
+}
+
+void StarlingClient::setCardOnlineEnabled(const QString &cardUid, bool enabled)
+{
+    const QString path = QStringLiteral("/api/v2/cards/%1/controls/online-enabled").arg(cardUid);
+    setCardBooleanControl(path, enabled, QStringLiteral("Online control updated."));
+}
+
+void StarlingClient::setCardMobileWalletEnabled(const QString &cardUid, bool enabled)
+{
+    const QString path = QStringLiteral("/api/v2/cards/%1/controls/mobile-wallet-enabled").arg(cardUid);
+    setCardBooleanControl(path, enabled, QStringLiteral("Mobile wallet control updated."));
+}
+
+void StarlingClient::setCardGamblingEnabled(const QString &cardUid, bool enabled)
+{
+    const QString path = QStringLiteral("/api/v2/cards/%1/controls/gambling-enabled").arg(cardUid);
+    setCardBooleanControl(path, enabled, QStringLiteral("Gambling control updated."));
+}
+
+void StarlingClient::setCardMagStripeEnabled(const QString &cardUid, bool enabled)
+{
+    const QString path = QStringLiteral("/api/v2/cards/%1/controls/mag-stripe-enabled").arg(cardUid);
+    setCardBooleanControl(path, enabled, QStringLiteral("Mag-stripe control updated."));
+}
+
+void StarlingClient::setCardCurrencySwitch(const QString &cardUid,
+                                           const QString &currency,
+                                           bool enabled)
+{
+    if (m_token.isEmpty()) {
+        setStatus(QStringLiteral("Main token not loaded."));
+        return;
+    }
+
+    if (cardUid.trimmed().isEmpty() || currency.trimmed().isEmpty()) {
+        setStatus(QStringLiteral("Missing card UID or currency."));
+        return;
+    }
+
+    const QString path = QStringLiteral("/api/v2/cards/%1/controls/currency-switch").arg(cardUid);
+
+    QJsonObject payload;
+    payload.insert(QStringLiteral("currency"), currency.trimmed());
+    payload.insert(QStringLiteral("enabled"), enabled);
+
+    sendJsonWithToken(path,
+                      QStringLiteral("PUT"),
+                      payload,
+                      m_token,
+                      [this](const QByteArray &) {
+        setStatus(QStringLiteral("Currency control updated."));
+        refreshCards();
+    });
+}
+
+void StarlingClient::getJson(const QString &path,
+                             const std::function<void(const QByteArray &)> &onSuccess)
+{
+    if (!m_online) {
+        setStatus(QStringLiteral("No internet connection."));
+        return;
+    }
+
+    if (m_token.isEmpty()) {
+        setStatus("Missing token.");
+        return;
+    }
+
+    beginRequest();
+
+    QNetworkRequest req(QUrl(QString::fromLatin1(BASE_URL) + path));
+    req.setRawHeader("Authorization", QByteArray("Bearer ") + m_token.toUtf8());
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+
+    QNetworkReply *reply = m_nam.get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, onSuccess]() {
+        const int statusCode =
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+
+        if (reply->error() != QNetworkReply::NoError) {
+            setStatus(QString("Network/API error: %1 (HTTP %2)")
+                          .arg(reply->errorString())
+                          .arg(statusCode));
+            endRequest();
+            reply->deleteLater();
+            return;
+        }
+
+        const QByteArray body = reply->readAll();
+        onSuccess(body);
+        endRequest();
+        reply->deleteLater();
+    });
+}
+
+QString StarlingClient::formatMinorUnits(qint64 minorUnits, const QString &currencyCode) const
+{
+    const double major = static_cast<double>(minorUnits) / 100.0;
+    return QString("%1 %2").arg(currencyCode, QString::number(major, 'f', 2));
+}
+
+QString StarlingClient::formatIsoDateTime(const QString &isoString) const
+{
+    const QDateTime dt = QDateTime::fromString(isoString, Qt::ISODate);
+    if (!dt.isValid())
+        return isoString;
+
+    return dt.toLocalTime().toString("dd MMM yyyy hh:mm");
+}
+
+QString StarlingClient::formatSortCode(const QString &sortCode) const
+{
+    QString digits;
+    for (int i = 0; i < sortCode.length(); ++i) {
+        if (sortCode.at(i).isDigit())
+            digits.append(sortCode.at(i));
+    }
+
+    if (digits.length() != 6)
+        return sortCode;
+
+    return QString("%1-%2-%3")
+            .arg(digits.mid(0, 2))
+            .arg(digits.mid(2, 2))
+            .arg(digits.mid(4, 2));
+}
+
+QString StarlingClient::signedAmountString(const QString &direction,
+                                           qint64 minorUnits,
+                                           const QString &currencyCode) const
+{
+    const double major = static_cast<double>(minorUnits) / 100.0;
+    const QString sign = (direction == "OUT") ? "-" : "+";
+    return QString("%1%2 %3")
+            .arg(sign)
+            .arg(QString::number(major, 'f', 2))
+            .arg(currencyCode);
+}
+
+QString StarlingClient::sectionTitleForIsoDate(const QString &isoString) const
+{
+    const QDateTime dt = QDateTime::fromString(isoString, Qt::ISODate);
+    if (!dt.isValid())
+        return QString();
+
+    const QDate txDate = dt.toLocalTime().date();
+    const QDate today = QDate::currentDate();
+    const QDate yesterday = today.addDays(-1);
+
+    if (txDate == today)
+        return QStringLiteral("Today");
+
+    if (txDate == yesterday)
+        return QStringLiteral("Yesterday");
+
+    return txDate.toString("dd MMM yyyy");
+}
+
+QString StarlingClient::buildPostalAddress(const QString &line1,
+                                           const QString &line2,
+                                           const QString &line3,
+                                           const QString &postTown,
+                                           const QString &postCode,
+                                           const QString &countryCode) const
+{
+    QStringList parts;
+    if (!line1.isEmpty()) parts << line1;
+    if (!line2.isEmpty()) parts << line2;
+    if (!line3.isEmpty()) parts << line3;
+    if (!postTown.isEmpty()) parts << postTown;
+    if (!postCode.isEmpty()) parts << postCode;
+    if (!countryCode.isEmpty()) parts << countryCode;
+    return parts.join("\n");
+}
+
+void StarlingClient::discoverAccount()
+{
+    getJson("/api/v2/accounts", [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+        const QJsonArray accounts = root.value("accounts").toArray();
+
+        if (accounts.isEmpty()) {
+            setStatus("No account returned by API.");
+            return;
+        }
+
+        QVariantList rows;
+        for (int i = 0; i < accounts.size(); ++i) {
+            const QJsonObject accObj = accounts.at(i).toObject();
+
+            QVariantMap row;
+            row.insert(QStringLiteral("accountUid"),
+                       accObj.value(QStringLiteral("accountUid")).toString());
+            row.insert(QStringLiteral("categoryUid"),
+                       accObj.value(QStringLiteral("defaultCategory")).toString());
+            row.insert(QStringLiteral("accountName"),
+                       accObj.value(QStringLiteral("name")).toString());
+            row.insert(QStringLiteral("accountType"),
+                       accObj.value(QStringLiteral("accountType")).toString());
+            row.insert(QStringLiteral("accountNumber"), QString());
+            row.insert(QStringLiteral("sortCode"), QString());
+            row.insert(QStringLiteral("isDefault"), i == 0);
+
+            rows.append(row);
+        }
+
+        if (rows.isEmpty()) {
+            setStatus("No account returned by API.");
+            return;
+        }
+
+        m_sourceAccounts = rows;
+        emit sourceAccountsChanged();
+
+        const QVariantMap first = rows.first().toMap();
+        m_accountUid = first.value(QStringLiteral("accountUid")).toString();
+        m_categoryUid = first.value(QStringLiteral("categoryUid")).toString();
+        m_accountName = first.value(QStringLiteral("accountName")).toString();
+        m_accountType = first.value(QStringLiteral("accountType")).toString();
+
+        emit accountChanged();
+        setStatus("Account discovered.");
+
+        refreshBalance();
+
+        for (const QVariant &rowVar : m_sourceAccounts) {
+            const QString uid = rowVar.toMap().value(QStringLiteral("accountUid")).toString();
+            refreshSourceAccountIdentifiers(uid);
+        }
+    });
+}
+
+void StarlingClient::refreshBalance()
+{
+    if (m_accountUid.isEmpty()) {
+        if (!m_initializing)
+            initialize(m_startupDaysBack);
+        return;
+    }
+
+    const QString path = QString("/api/v2/accounts/%1/balance").arg(m_accountUid);
+    getJson(path, [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        const QJsonObject cleared = root.value("clearedBalance").toObject();
+        const QJsonObject effective = root.value("effectiveBalance").toObject();
+
+        m_currency = effective.value("currency").toString("GBP");
+        m_clearedBalance = formatMinorUnits(
+                    cleared.value("minorUnits").toVariant().toLongLong(), m_currency);
+        m_availableBalance = formatMinorUnits(
+                    effective.value("minorUnits").toVariant().toLongLong(), m_currency);
+
+        emit balanceChanged();
+        touchLastUpdated();
+        setStatus("Balance updated.");
+        refreshTransactions(m_startupDaysBack);
+    });
+}
+
+void StarlingClient::refreshTransactions(int daysBack)
+{
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        if (!m_initializing)
+            initialize(daysBack);
+        return;
+    }
+
+    const QDateTime since = QDateTime::currentDateTimeUtc().addDays(-daysBack);
+    const QString sinceIso = since.toString(Qt::ISODate);
+
+    QUrlQuery query;
+    query.addQueryItem("changesSince", sinceIso);
+
+    const QString path = QString("/api/v2/feed/account/%1/category/%2?%3")
+            .arg(m_accountUid)
+            .arg(m_categoryUid)
+            .arg(query.toString(QUrl::FullyEncoded));
+
+    if (m_initializing)
+        setStatus(QStringLiteral("Loading transactions..."));
+
+    getJson(path, [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+        const QJsonArray items = root.value("feedItems").toArray();
+
+        QVariantList newRows;
+        QString currentSection;
+
+        for (int i = 0; i < items.size(); ++i) {
+            const QJsonObject item = items.at(i).toObject();
+
+            const QString direction = item.value("direction").toString();
+            const QString counterParty = item.value("counterPartyName").toString();
+            const QString reference = item.value("reference").toString();
+            const QString spendingCategory = item.value("spendingCategory").toString();
+            const QString updatedAt = item.value("updatedAt").toString();
+            const QString status = item.value("status").toString();
+
+            const QJsonObject amount = item.value("amount").toObject();
+            const QString curr = amount.value("currency").toString("GBP");
+            const qint64 minor = amount.value("minorUnits").toVariant().toLongLong();
+
+            QString title = counterParty;
+            if (title.isEmpty())
+                title = reference;
+            if (title.isEmpty())
+                title = QStringLiteral("(no description)");
+
+            const QString section = sectionTitleForIsoDate(updatedAt);
+
+            if (section != currentSection) {
+                QVariantMap headerRow;
+                headerRow.insert("rowType", "header");
+                headerRow.insert("title", section);
+                newRows.append(headerRow);
+                currentSection = section;
+            }
+
+            QVariantMap tx;
+            tx.insert("rowType", "transaction");
+            tx.insert("title", title);
+            tx.insert("reference", reference);
+            tx.insert("direction", direction);
+            tx.insert("amount", signedAmountString(direction, minor, curr));
+            tx.insert("amountValue", static_cast<qlonglong>(minor));
+            tx.insert("currency", curr);
+            tx.insert("date", formatIsoDateTime(updatedAt));
+            tx.insert("dateRaw", updatedAt);
+            tx.insert("section", section);
+            tx.insert("status", status);
+            tx.insert("category", spendingCategory);
+
+            newRows.append(tx);
+        }
+
+        m_transactionRows = newRows;
+        emit transactionsChanged();
+        touchLastUpdated();
+        setStatus(QString("Loaded %1 transaction(s).").arg(items.size()));
+
+        setStatus(QStringLiteral("Loading payees..."));
+        refreshPayees();
+    });
+}
+
+bool StarlingClient::factoryResetAfterConfirmation()
+{
+    QStringList failures;
+
+    auto clearIfPresent = [&](bool present, const QString &name, const std::function<bool()> &fn) {
+        if (!present)
+            return;
+        if (!fn())
+            failures << name;
+    };
+
+    // Stored secrets
+    clearIfPresent(!m_tokenStore.loadToken().trimmed().isEmpty(),
+                   QStringLiteral("PAT"),
+                   [this]() { return m_tokenStore.clearToken(); });
+
+    clearIfPresent(!m_tokenStore.loadPayeeWriteToken().trimmed().isEmpty(),
+                   QStringLiteral("payee-write PAT"),
+                   [this]() { return m_tokenStore.clearPayeeWriteToken(); });
+
+    clearIfPresent(!m_tokenStore.loadApiKeyId().trimmed().isEmpty(),
+                   QStringLiteral("API key ID"),
+                   [this]() { return m_tokenStore.clearApiKeyId(); });
+
+    clearIfPresent(!m_tokenStore.loadPrivateApiKeyPem().trimmed().isEmpty(),
+                   QStringLiteral("private API key"),
+                   [this]() { return m_tokenStore.clearPrivateApiKeyPem(); });
+
+    clearIfPresent(hasStoredPhysicalCard(),
+                   QStringLiteral("physical card"),
+                   [this]() { return m_tokenStore.clearPhysicalCard(); });
+
+    clearIfPresent(hasStoredPhysicalCardCvv(),
+                   QStringLiteral("card CVV"),
+                   [this]() { return m_tokenStore.clearPhysicalCardCvv(); });
+
+    clearIfPresent(hasStoredPhysicalCardPin(),
+                   QStringLiteral("card PIN"),
+                   [this]() { return m_tokenStore.clearPhysicalCardPin(); });
+
+    // In-memory state
+    setToken(QString());
+    setPayeeWriteToken(QString());
+    setApiKeyId(QString());
+    setPrivateApiKeyPem(QString());
+
+    resetLoadedData();
+    clearTransactions();
+    clearPayees();
+    clearPayeeDetail();
+    clearCards();
+    clearConsentState();
+    clearPaymentDraft();
+    clearPaymentResult();
+
+    // Clear app PIN from QSettings
+    m_pinHash.clear();
+    m_pinSalt.clear();
+    {
+        QSettings settings;
+        settings.remove(QStringLiteral("security/pinHash"));
+        settings.remove(QStringLiteral("security/pinSalt"));
+    }
+    emit pinEnabledChanged();
+    emit pinSetupRequiredChanged();
+
+    // Clear PIN/UI state
+    setPinError(QString());
+    setPinPromptVisible(false);
+    clearPinConfirmation();
+    clearPinSettingsError();
+
+    // Leave settings flow cleanly
+    clearNavigationTarget();
+    setNavigationTarget(QStringLiteral("Main"));
+
+    if (!failures.isEmpty()) {
+        setStatus(QStringLiteral("Factory reset completed with errors clearing: %1")
+                  .arg(failures.join(QStringLiteral(", "))));
+        return false;
+    }
+
+    setStatus(QStringLiteral("All locally stored data deleted."));
+    return true;
+}

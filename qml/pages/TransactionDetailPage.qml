@@ -1,0 +1,288 @@
+/*
+    Copyright (C) 2026 edp17 and chatGPT
+
+    This file is part of harbour-starling.
+
+    The harbour-starling is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    The harbour-starling is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with the harbour-starling. If not, see <http://www.gnu.org/licenses/>.
+*/
+import QtQuick 2.0
+import Sailfish.Silica 1.0
+import "../components"
+
+Page {
+    id: page
+    allowedOrientations: Orientation.All
+
+    property bool readyForContent: !starlingClient.locked
+    property var transactionData: ({})
+    property string titleText: transactionData && transactionData.title ? transactionData.title : "-"
+    property string amountText: transactionData && transactionData.amount ? transactionData.amount : "-"
+    property string referenceText: transactionData && transactionData.reference ? transactionData.reference : ""
+    property string dateText: transactionData && transactionData.date ? transactionData.date : "-"
+    property string rawDateText: transactionData && transactionData.dateRaw ? transactionData.dateRaw : ""
+    property string statusText: transactionData && transactionData.status ? transactionData.status : "-"
+    property string categoryText: transactionData && transactionData.category ? transactionData.category : "-"
+    property string directionText: transactionData && transactionData.direction ? transactionData.direction : "-"
+    property string currencyText: transactionData && transactionData.currency ? transactionData.currency : "-"
+
+    function shown(value) {
+        return value && String(value).length > 0 ? value : "-"
+    }
+
+    SilicaFlickable {
+        anchors.fill: parent
+        contentHeight: contentColumn.height + Theme.paddingLarge
+        visible: !starlingClient.locked
+
+        PullDownMenu {
+            MenuItem {
+                text: qsTr("Refresh transactions")
+                onClicked: starlingClient.refreshTransactions(14)
+            }
+        }
+
+        VerticalScrollDecorator {}
+
+        Column {
+            id: contentColumn
+            width: parent.width
+            spacing: Theme.paddingMedium
+
+            PageHeader {
+                title: qsTr("Transaction")
+            }
+
+            Rectangle {
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * x
+                height: summaryColumn.height + 2 * Theme.paddingLarge
+                radius: Theme.paddingMedium
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.18)
+                border.width: 1
+                border.color: Theme.rgba(Theme.primaryColor, 0.15)
+
+                Column {
+                    id: summaryColumn
+                    x: Theme.paddingLarge
+                    y: Theme.paddingLarge
+                    width: parent.width - 2 * Theme.paddingLarge
+                    spacing: Theme.paddingSmall
+
+                    Label {
+                        width: parent.width
+                        wrapMode: Text.Wrap
+                        text: titleText
+                        color: Theme.primaryColor
+                        font.pixelSize: Theme.fontSizeLarge
+                    }
+
+                    Label {
+                        width: parent.width
+                        wrapMode: Text.Wrap
+                        text: amountText
+                        color: directionText === "OUT" ? Theme.primaryColor : Theme.highlightColor
+                        font.pixelSize: Theme.fontSizeHuge
+                    }
+
+                    Row {
+                        width: parent.width
+                        spacing: Theme.paddingMedium
+
+                        Label {
+                            text: shown(dateText)
+                            color: Theme.secondaryColor
+                            font.pixelSize: Theme.fontSizeSmall
+                        }
+
+                        Label {
+                            visible: directionText.length > 0
+                            text: shown(directionText)
+                            color: Theme.secondaryColor
+                            font.pixelSize: Theme.fontSizeSmall
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * x
+                height: detailsColumn.height + 2 * Theme.paddingMedium
+                radius: Theme.paddingMedium
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
+                border.width: 1
+                border.color: Theme.rgba(Theme.primaryColor, 0.15)
+
+                Column {
+                    id: detailsColumn
+                    x: Theme.paddingMedium
+                    y: Theme.paddingMedium
+                    width: parent.width - 2 * Theme.paddingMedium
+                    spacing: Theme.paddingMedium
+
+                    Label {
+                        width: parent.width
+                        text: qsTr("Details")
+                        color: Theme.highlightColor
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+
+                    Column {
+                        width: parent.width
+                        spacing: Theme.paddingSmall / 2
+
+                        Label {
+                            width: parent.width
+                            text: qsTr("Reference")
+                            color: Theme.secondaryHighlightColor
+                            font.pixelSize: Theme.fontSizeExtraSmall
+                        }
+
+                        Label {
+                            width: parent.width
+                            wrapMode: Text.Wrap
+                            text: shown(referenceText)
+                            color: Theme.primaryColor
+                        }
+                    }
+
+                    Row {
+                        width: parent.width
+                        spacing: Theme.paddingMedium
+
+                        Column {
+                            width: parent.width / 2 - Theme.paddingMedium / 2
+                            spacing: Theme.paddingSmall / 2
+
+                            Label {
+                                width: parent.width
+                                text: qsTr("Category")
+                                color: Theme.secondaryHighlightColor
+                                font.pixelSize: Theme.fontSizeExtraSmall
+                            }
+
+                            Label {
+                                width: parent.width
+                                wrapMode: Text.Wrap
+                                text: shown(categoryText)
+                                color: Theme.primaryColor
+                            }
+                        }
+
+                        Column {
+                            width: parent.width / 2 - Theme.paddingMedium / 2
+                            spacing: Theme.paddingSmall / 2
+
+                            Label {
+                                width: parent.width
+                                text: qsTr("Status")
+                                color: Theme.secondaryHighlightColor
+                                font.pixelSize: Theme.fontSizeExtraSmall
+                            }
+
+                            Label {
+                                width: parent.width
+                                wrapMode: Text.Wrap
+                                text: shown(statusText)
+                                color: Theme.primaryColor
+                            }
+                        }
+                    }
+
+                    Row {
+                        width: parent.width
+                        spacing: Theme.paddingMedium
+
+                        Column {
+                            width: parent.width / 2 - Theme.paddingMedium / 2
+                            spacing: Theme.paddingSmall / 2
+
+                            Label {
+                                width: parent.width
+                                text: qsTr("Direction")
+                                color: Theme.secondaryHighlightColor
+                                font.pixelSize: Theme.fontSizeExtraSmall
+                            }
+
+                            Label {
+                                width: parent.width
+                                wrapMode: Text.Wrap
+                                text: shown(directionText)
+                                color: Theme.primaryColor
+                            }
+                        }
+
+                        Column {
+                            width: parent.width / 2 - Theme.paddingMedium / 2
+                            spacing: Theme.paddingSmall / 2
+
+                            Label {
+                                width: parent.width
+                                text: qsTr("Currency")
+                                color: Theme.secondaryHighlightColor
+                                font.pixelSize: Theme.fontSizeExtraSmall
+                            }
+
+                            Label {
+                                width: parent.width
+                                wrapMode: Text.Wrap
+                                text: shown(currencyText)
+                                color: Theme.primaryColor
+                            }
+                        }
+                    }
+
+                    Column {
+                        width: parent.width
+                        spacing: Theme.paddingSmall / 2
+
+                        Label {
+                            width: parent.width
+                            text: qsTr("Raw timestamp")
+                            color: Theme.secondaryHighlightColor
+                            font.pixelSize: Theme.fontSizeExtraSmall
+                        }
+
+                        Label {
+                            width: parent.width
+                            wrapMode: Text.Wrap
+                            text: shown(rawDateText)
+                            color: Theme.primaryColor
+                        }
+                    }
+                }
+            }
+
+            Item {
+                width: 1
+                height: Theme.paddingMedium
+            }
+        }
+    }
+
+    UnlockOverlay {
+        anchors.fill: parent
+        visible: starlingClient.locked
+        title: qsTr("App locked")
+        message: qsTr("Authenticate to access your Starling data.")
+        busy: starlingClient.busy
+        z: 998
+        onUnlockRequested: starlingClient.unlock()
+    }
+
+    ActivityCatcher {
+        z: 997
+        enabled: !starlingClient.locked
+    }
+}
