@@ -68,6 +68,9 @@ class StarlingClient : public QObject
     Q_PROPERTY(QVariantList sourceAccounts READ sourceAccounts NOTIFY sourceAccountsChanged)
     Q_PROPERTY(bool online READ online NOTIFY onlineChanged)
 
+    Q_PROPERTY(QVariantList directDebitMandates READ directDebitMandates NOTIFY directDebitMandatesChanged)
+    Q_PROPERTY(QVariantList standingOrders READ standingOrders NOTIFY standingOrdersChanged)
+
 public:
     explicit StarlingClient(QObject *parent = nullptr);
 
@@ -109,6 +112,9 @@ public:
     QString paymentResultMessage() const;
     QVariantList sourceAccounts() const;
     bool online() const;
+
+    QVariantList directDebitMandates() const;
+    QVariantList standingOrders() const;
 
     // invokables
     Q_INVOKABLE void discoverAccount();
@@ -286,6 +292,10 @@ public:
     Q_INVOKABLE bool deleteStoredPhysicalCardCvvAfterConfirmation();
     Q_INVOKABLE bool factoryResetAfterConfirmation();
 
+    Q_INVOKABLE void refreshDirectDebitMandates();
+    Q_INVOKABLE void refreshStandingOrders();
+    Q_INVOKABLE void refreshRegularPayments();
+
 signals:
     void tokenChanged();
     void accountChanged();
@@ -323,6 +333,8 @@ signals:
     void pinConfirmed();
     void sourceAccountsChanged();
     void onlineChanged();
+    void directDebitMandatesChanged();
+    void standingOrdersChanged();
 
 private:
     // helpers
@@ -476,6 +488,9 @@ private:
     QVariantList m_sourceAccounts;
     QNetworkConfigurationManager m_networkConfigManager;
     bool m_online = true;
+
+    QVariantList m_directDebitMandates;
+    QVariantList m_standingOrders;
 };
 
 #endif // STARLINGCLIENT_H
