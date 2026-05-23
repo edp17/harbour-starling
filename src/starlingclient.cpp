@@ -3332,6 +3332,111 @@ void StarlingClient::refreshTransactions(int daysBack)
     });
 }
 
+void StarlingClient::refreshTransactionsRange(const QString &fromDate, const QString &toDate)
+{
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        if (!m_initializing)
+            initialize(m_startupDaysBack > 0 ? m_startupDaysBack : 14);
+        return;
+    }
+
+    const QDate from = QDate::fromString(fromDate.trimmed(), Qt::ISODate);
+    const QDate to = QDate::fromString(toDate.trimmed(), Qt::ISODate);
+
+    if (!from.isValid() || !to.isValid()) {
+        setStatus(QStringLiteral("Invalid transaction date range."));
+        return;
+    }
+
+    if (from > to) {
+        setStatus(QStringLiteral("From date must be before To date."));
+        return;
+    }
+
+    const QDateTime minDateTime(from, QTime(0, 0, 0), Qt::UTC);
+    const QDateTime maxDateTime(to.addDays(1), QTime(0, 0, 0), Qt::UTC);
+
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("minTransactionTimestamp"),
+                       minDateTime.toString(Qt::ISODate));
+    query.addQueryItem(QStringLiteral("maxTransactionTimestamp"),
+                       maxDateTime.toString(Qt::ISODate));
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/category/%2/transactions-between?%3")
+            .arg(m_accountUid)
+            .arg(m_categoryUid)
+            .arg(query.toString(QUrl::FullyEncoded));
+
+    setStatus(QStringLiteral("Loading transactions..."));
+
+    getJson(path, [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+        const QJsonArray items = root.value(QStringLiteral("feedItems")).toArray();
+
+        QVariantList newRows;
+        QString currentSection;
+
+        for (int i = 0; i < items.size(); ++i) {
+            const QJsonObject item = items.at(i).toObject();
+
+            const QString direction = item.value(QStringLiteral("direction")).toString();
+            const QString counterParty = item.value(QStringLiteral("counterPartyName")).toString();
+            const QString reference = item.value(QStringLiteral("reference")).toString();
+            const QString spendingCategory = item.value(QStringLiteral("spendingCategory")).toString();
+            const QString updatedAt = item.value(QStringLiteral("updatedAt")).toString();
+            const QString transactionTime = item.value(QStringLiteral("transactionTime")).toString();
+            const QString status = item.value(QStringLiteral("status")).toString();
+
+            const QString dateForDisplay =
+                    !transactionTime.isEmpty() ? transactionTime : updatedAt;
+
+            const QJsonObject amount = item.value(QStringLiteral("amount")).toObject();
+            const QString curr = amount.value(QStringLiteral("currency")).toString(QStringLiteral("GBP"));
+            const qint64 minor = amount.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
+
+            QString title = counterParty;
+            if (title.isEmpty())
+                title = reference;
+            if (title.isEmpty())
+                title = QStringLiteral("(no description)");
+
+            const QString section = sectionTitleForIsoDate(dateForDisplay);
+
+            if (section != currentSection) {
+                QVariantMap headerRow;
+                headerRow.insert(QStringLiteral("rowType"), QStringLiteral("header"));
+                headerRow.insert(QStringLiteral("title"), section);
+                newRows.append(headerRow);
+                currentSection = section;
+            }
+
+            QVariantMap tx;
+            tx.insert(QStringLiteral("rowType"), QStringLiteral("transaction"));
+            tx.insert(QStringLiteral("title"), title);
+            tx.insert(QStringLiteral("reference"), reference);
+            tx.insert(QStringLiteral("direction"), direction);
+            tx.insert(QStringLiteral("amount"), signedAmountString(direction, minor, curr));
+            tx.insert(QStringLiteral("amountValue"), static_cast<qint64>(minor));
+            tx.insert(QStringLiteral("currency"), curr);
+            tx.insert(QStringLiteral("date"), formatIsoDateTime(dateForDisplay));
+            tx.insert(QStringLiteral("dateRaw"), dateForDisplay);
+            tx.insert(QStringLiteral("section"), section);
+            tx.insert(QStringLiteral("status"), status);
+            tx.insert(QStringLiteral("category"), spendingCategory);
+
+            newRows.append(tx);
+        }
+
+        m_transactionRows = newRows;
+        emit transactionsChanged();
+
+        touchLastUpdated();
+        setStatus(QStringLiteral("Loaded %1 transaction(s).").arg(items.size()));
+    });
+}
+
 bool StarlingClient::factoryResetAfterConfirmation()
 {
     QStringList failures;

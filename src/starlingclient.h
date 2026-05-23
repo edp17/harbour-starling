@@ -114,6 +114,7 @@ public:
     Q_INVOKABLE void discoverAccount();
     Q_INVOKABLE void refreshBalance();
     Q_INVOKABLE void refreshTransactions(int daysBack = 14);
+    Q_INVOKABLE void refreshTransactionsRange(const QString &fromDate, const QString &toDate);
     Q_INVOKABLE void saveToken();
     Q_INVOKABLE void loadToken();
     Q_INVOKABLE void clearToken();

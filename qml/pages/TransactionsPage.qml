@@ -24,6 +24,44 @@ Page {
     id: page
     property bool readyForContent: !starlingClient.locked
 
+    property string activeFilterLabel: pageStack.transactionFilterLabel || qsTr("Last 14 days")
+    property int activeDaysBack: pageStack.transactionFilterDays || 14
+    property bool customFilterActive: pageStack.transactionFilterCustom || false
+    property string customFromDate: pageStack.transactionFilterFrom || ""
+    property string customToDate: pageStack.transactionFilterTo || ""
+
+    function refreshCurrentFilter() {
+        if (customFilterActive) {
+            starlingClient.refreshTransactionsRange(customFromDate, customToDate)
+        } else {
+            starlingClient.refreshTransactions(activeDaysBack)
+        }
+    }
+
+    function setDaysFilter(days) {
+        activeDaysBack = days
+        customFilterActive = false
+        activeFilterLabel = qsTr("Last %1 days").arg(days)
+
+        pageStack.transactionFilterLabel = activeFilterLabel
+        pageStack.transactionFilterDays = activeDaysBack
+        pageStack.transactionFilterCustom = false
+        pageStack.transactionFilterFrom = ""
+        pageStack.transactionFilterTo = ""
+
+        starlingClient.refreshTransactions(days)
+    }
+
+    function todayIsoDate() {
+        return new Date().toISOString().substring(0, 10)
+    }
+
+    function daysAgoIsoDate(days) {
+        var d = new Date()
+        d.setDate(d.getDate() - days)
+        return d.toISOString().substring(0, 10)
+    }
+
     function timeOnly(rawDate)
     {
         if (!rawDate)
@@ -60,20 +98,38 @@ Page {
             MenuItem {
                 enabled: page.readyForContent
                 visible: page.readyForContent
-                text: "Refresh 30 days"
-                onClicked: starlingClient.refreshTransactions(30)
+                text: qsTr("Refresh current filter")
+                onClicked: page.refreshCurrentFilter()
             }
             MenuItem {
                 enabled: page.readyForContent
                 visible: page.readyForContent
-                text: "Refresh 14 days"
-                onClicked: starlingClient.refreshTransactions(14)
+                text: qsTr("Custom range")
+                onClicked: {
+                    if (page.customFromDate.length === 0)
+                        page.customFromDate = page.daysAgoIsoDate(30)
+                    if (page.customToDate.length === 0)
+                        page.customToDate = page.todayIsoDate()
+                    customRangeOverlay.open = true
+                }
             }
             MenuItem {
                 enabled: page.readyForContent
                 visible: page.readyForContent
-                text: "Refresh 7 days"
-                onClicked: starlingClient.refreshTransactions(7)
+                text: qsTr("Last 30 days")
+                onClicked: page.setDaysFilter(30)
+            }
+            MenuItem {
+                enabled: page.readyForContent
+                visible: page.readyForContent
+                text: qsTr("Last 14 days")
+                onClicked: page.setDaysFilter(14)
+            }
+            MenuItem {
+                enabled: page.readyForContent
+                visible: page.readyForContent
+                text: qsTr("Last 7 days")
+                onClicked: page.setDaysFilter(7)
             }
         }
 
@@ -83,6 +139,42 @@ Page {
 
             PageHeader {
                 title: "Transactions"
+            }
+
+            Rectangle {
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * x
+                height: filterColumn.height + 2 * Theme.paddingMedium
+
+                radius: Theme.paddingMedium
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.12)
+                border.width: 1
+                border.color: Theme.rgba(Theme.primaryColor, 0.12)
+
+                Column {
+                    id: filterColumn
+
+                    x: Theme.paddingMedium
+                    y: Theme.paddingMedium
+                    width: parent.width - 2 * Theme.paddingMedium
+                    spacing: Theme.paddingSmall
+
+                    Label {
+                        width: parent.width
+                        text: qsTr("Active filter")
+                        color: Theme.secondaryColor
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+
+                    Label {
+                        width: parent.width
+                        text: page.activeFilterLabel
+                        color: Theme.highlightColor
+                        font.pixelSize: Theme.fontSizeMedium
+                        font.bold: true
+                        wrapMode: Text.Wrap
+                    }
+                }
             }
 
             Label {
@@ -261,6 +353,30 @@ Page {
 
         VerticalScrollDecorator {}
     }
+    // Trasaction custom range overlay
+    TransactionCustomRangeOverlay {
+        id: customRangeOverlay
+
+        fromDate: page.customFromDate
+        toDate: page.customToDate
+
+        onAccepted: {
+            page.customFromDate = fromDate
+            page.customToDate = toDate
+            page.customFilterActive = true
+            page.activeFilterLabel = fromDate + " - " + toDate
+
+            pageStack.transactionFilterLabel = page.activeFilterLabel
+            pageStack.transactionFilterDays = page.activeDaysBack
+            pageStack.transactionFilterCustom = true
+            pageStack.transactionFilterFrom = fromDate
+            pageStack.transactionFilterTo = toDate
+
+            starlingClient.refreshTransactionsRange(fromDate, toDate)
+        }
+    }
+
+    // Unlock overlay
     UnlockOverlay {
         anchors.fill: parent
         visible: starlingClient.locked
@@ -276,6 +392,6 @@ Page {
     }
     Component.onCompleted: {
         if (starlingClient.token.length > 0 && starlingClient.transactionRows.length === 0)
-            starlingClient.refreshTransactions(14)
+            page.setDaysFilter(14)
     }
 }
