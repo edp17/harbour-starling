@@ -101,12 +101,33 @@ void StarlingClient::refreshDirectDebitMandates()
             const QJsonObject item = items.at(i).toObject();
 
             QVariantMap row;
-            row.insert(QStringLiteral("mandateUid"), item.value(QStringLiteral("mandateUid")).toString());
-            row.insert(QStringLiteral("originatorName"), item.value(QStringLiteral("originatorName")).toString());
-            row.insert(QStringLiteral("originatorUid"), item.value(QStringLiteral("originatorUid")).toString());
+
+            const QString uid = item.value(QStringLiteral("uid")).toString(
+                        item.value(QStringLiteral("mandateUid")).toString());
+
+            row.insert(QStringLiteral("mandateUid"), uid);
             row.insert(QStringLiteral("reference"), item.value(QStringLiteral("reference")).toString());
             row.insert(QStringLiteral("status"), item.value(QStringLiteral("status")).toString());
+            row.insert(QStringLiteral("source"), item.value(QStringLiteral("source")).toString());
             row.insert(QStringLiteral("created"), formatIsoDateTime(item.value(QStringLiteral("created")).toString()));
+            row.insert(QStringLiteral("cancelled"), formatIsoDateTime(item.value(QStringLiteral("cancelled")).toString()));
+            row.insert(QStringLiteral("nextDate"), item.value(QStringLiteral("nextDate")).toString());
+            row.insert(QStringLiteral("lastDate"), item.value(QStringLiteral("lastDate")).toString());
+            row.insert(QStringLiteral("originatorName"), item.value(QStringLiteral("originatorName")).toString());
+            row.insert(QStringLiteral("originatorUid"), item.value(QStringLiteral("originatorUid")).toString());
+            row.insert(QStringLiteral("merchantUid"), item.value(QStringLiteral("merchantUid")).toString());
+            row.insert(QStringLiteral("accountUid"), item.value(QStringLiteral("accountUid")).toString());
+            row.insert(QStringLiteral("categoryUid"), item.value(QStringLiteral("categoryUid")).toString());
+
+            const QJsonObject lastPayment = item.value(QStringLiteral("lastPayment")).toObject();
+            row.insert(QStringLiteral("lastPaymentDate"), lastPayment.value(QStringLiteral("lastDate")).toString());
+
+            const QJsonObject lastAmount = lastPayment.value(QStringLiteral("lastAmount")).toObject();
+            const QString lastCurrency = lastAmount.value(QStringLiteral("currency")).toString(QStringLiteral("GBP"));
+            const qint64 lastMinor = lastAmount.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
+
+            row.insert(QStringLiteral("lastPaymentAmount"),
+                       lastPayment.isEmpty() ? QString() : formatMinorUnits(lastMinor, lastCurrency));
 
             QString title = row.value(QStringLiteral("originatorName")).toString();
             if (title.isEmpty())
@@ -158,18 +179,32 @@ void StarlingClient::refreshStandingOrders()
             const QString currency = amount.value(QStringLiteral("currency")).toString(QStringLiteral("GBP"));
             const qint64 minor = amount.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
 
+            const QJsonObject recurrence = item.value(QStringLiteral("standingOrderRecurrence")).toObject();
+
             QVariantMap row;
             row.insert(QStringLiteral("paymentOrderUid"), item.value(QStringLiteral("paymentOrderUid")).toString());
-            row.insert(QStringLiteral("payeeName"), item.value(QStringLiteral("payeeName")).toString());
             row.insert(QStringLiteral("reference"), item.value(QStringLiteral("reference")).toString());
-            row.insert(QStringLiteral("status"), item.value(QStringLiteral("status")).toString());
-            row.insert(QStringLiteral("frequency"), item.value(QStringLiteral("frequency")).toString());
+            row.insert(QStringLiteral("payeeUid"), item.value(QStringLiteral("payeeUid")).toString());
+            row.insert(QStringLiteral("payeeAccountUid"), item.value(QStringLiteral("payeeAccountUid")).toString());
             row.insert(QStringLiteral("nextDate"), item.value(QStringLiteral("nextDate")).toString());
+            row.insert(QStringLiteral("cancelledAt"), formatIsoDateTime(item.value(QStringLiteral("cancelledAt")).toString()));
+            row.insert(QStringLiteral("updatedAt"), formatIsoDateTime(item.value(QStringLiteral("updatedAt")).toString()));
+            row.insert(QStringLiteral("spendingCategory"), item.value(QStringLiteral("spendingCategory")).toString());
+            row.insert(QStringLiteral("categoryUid"), item.value(QStringLiteral("categoryUid")).toString());
             row.insert(QStringLiteral("amount"), formatMinorUnits(minor, currency));
 
-            QString title = row.value(QStringLiteral("payeeName")).toString();
-            if (title.isEmpty())
-                title = row.value(QStringLiteral("reference")).toString();
+            row.insert(QStringLiteral("startDate"), recurrence.value(QStringLiteral("startDate")).toString());
+            row.insert(QStringLiteral("frequency"), recurrence.value(QStringLiteral("frequency")).toString());
+            row.insert(QStringLiteral("interval"), recurrence.value(QStringLiteral("interval")).toVariant().toString());
+            row.insert(QStringLiteral("count"), recurrence.value(QStringLiteral("count")).toVariant().toString());
+            row.insert(QStringLiteral("untilDate"), recurrence.value(QStringLiteral("untilDate")).toString());
+
+            const QString cancelledAt = row.value(QStringLiteral("cancelledAt")).toString();
+            row.insert(QStringLiteral("status"), cancelledAt.isEmpty()
+                       ? QStringLiteral("ACTIVE")
+                       : QStringLiteral("CANCELLED"));
+
+            QString title = row.value(QStringLiteral("reference")).toString();
             if (title.isEmpty())
                 title = QStringLiteral("Standing Order");
 

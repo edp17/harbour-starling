@@ -94,11 +94,19 @@ Page {
                     border.width: 1
                     border.color: Theme.rgba(Theme.primaryColor, 0.12)
 
+                    Image {
+                        anchors.right: parent.right
+                        anchors.rightMargin: Theme.paddingMedium
+                        anchors.verticalCenter: parent.verticalCenter
+                        source: "image://theme/icon-m-right"
+                        opacity: 0.65
+                    }
+
                     Column {
                         id: ddColumn
                         x: Theme.paddingMedium
                         y: Theme.paddingMedium
-                        width: parent.width - 2 * Theme.paddingMedium
+                        width: parent.width - 3 * Theme.paddingMedium - Theme.iconSizeMedium
                         spacing: Theme.paddingSmall
 
                         Label {
@@ -124,6 +132,14 @@ Page {
                             color: modelData.status === "ACTIVE" ? Theme.highlightColor : Theme.secondaryColor
                             font.pixelSize: Theme.fontSizeSmall
                         }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: pageStack.push(Qt.resolvedUrl("RegularPaymentDetailPage.qml"), {
+                            paymentType: "directDebit",
+                            payment: modelData
+                        })
                     }
                 }
             }
@@ -155,11 +171,19 @@ Page {
                     border.width: 1
                     border.color: Theme.rgba(Theme.primaryColor, 0.12)
 
+                    Image {
+                        anchors.right: parent.right
+                        anchors.rightMargin: Theme.paddingMedium
+                        anchors.verticalCenter: parent.verticalCenter
+                        source: "image://theme/icon-m-right"
+                        opacity: 0.65
+                    }
+
                     Column {
                         id: soColumn
                         x: Theme.paddingMedium
                         y: Theme.paddingMedium
-                        width: parent.width - 2 * Theme.paddingMedium
+                        width: parent.width - 3 * Theme.paddingMedium - Theme.iconSizeMedium
                         spacing: Theme.paddingSmall
 
                         Row {
@@ -205,6 +229,14 @@ Page {
                             color: modelData.status === "ACTIVE" ? Theme.highlightColor : Theme.secondaryColor
                             font.pixelSize: Theme.fontSizeSmall
                         }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: pageStack.push(Qt.resolvedUrl("RegularPaymentDetailPage.qml"), {
+                            paymentType: "standingOrder",
+                            payment: modelData
+                        })
                     }
                 }
             }
