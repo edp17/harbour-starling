@@ -74,7 +74,9 @@ Page {
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * x
                 visible: page.readyForContent && starlingClient.directDebitMandates.length === 0
-                text: qsTr("No Direct Debits found.")
+                text: starlingClient.directDebitMandates.length === 0
+                      ? qsTr("No Direct Debits found.")
+                      : ""
                 color: Theme.secondaryColor
                 wrapMode: Text.Wrap
             }
