@@ -24,11 +24,11 @@ Page {
     id: page
     property bool readyForContent: !starlingClient.locked
 
-    property string activeFilterLabel: pageStack.transactionFilterLabel || qsTr("Last 14 days")
-    property int activeDaysBack: pageStack.transactionFilterDays || 14
-    property bool customFilterActive: pageStack.transactionFilterCustom || false
-    property string customFromDate: pageStack.transactionFilterFrom || ""
-    property string customToDate: pageStack.transactionFilterTo || ""
+    property string activeFilterLabel: appWindow.transactionFilterLabel
+    property int activeDaysBack: appWindow.transactionFilterDays
+    property bool customFilterActive: appWindow.transactionFilterCustom
+    property string customFromDate: appWindow.transactionFilterFrom
+    property string customToDate: appWindow.transactionFilterTo
 
     function refreshCurrentFilter() {
         if (customFilterActive) {
@@ -43,11 +43,11 @@ Page {
         customFilterActive = false
         activeFilterLabel = qsTr("Last %1 days").arg(days)
 
-        pageStack.transactionFilterLabel = activeFilterLabel
-        pageStack.transactionFilterDays = activeDaysBack
-        pageStack.transactionFilterCustom = false
-        pageStack.transactionFilterFrom = ""
-        pageStack.transactionFilterTo = ""
+        appWindow.transactionFilterLabel = activeFilterLabel
+        appWindow.transactionFilterDays = activeDaysBack
+        appWindow.transactionFilterCustom = false
+        appWindow.transactionFilterFrom = ""
+        appWindow.transactionFilterTo = ""
 
         starlingClient.refreshTransactions(days)
     }
@@ -366,11 +366,11 @@ Page {
             page.customFilterActive = true
             page.activeFilterLabel = fromDate + " - " + toDate
 
-            pageStack.transactionFilterLabel = page.activeFilterLabel
-            pageStack.transactionFilterDays = page.activeDaysBack
-            pageStack.transactionFilterCustom = true
-            pageStack.transactionFilterFrom = fromDate
-            pageStack.transactionFilterTo = toDate
+            appWindow.transactionFilterLabel = page.activeFilterLabel
+            appWindow.transactionFilterDays = page.activeDaysBack
+            appWindow.transactionFilterCustom = true
+            appWindow.transactionFilterFrom = fromDate
+            appWindow.transactionFilterTo = toDate
 
             starlingClient.refreshTransactionsRange(fromDate, toDate)
         }
