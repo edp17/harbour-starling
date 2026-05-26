@@ -295,6 +295,8 @@ public:
     Q_INVOKABLE void refreshDirectDebitMandates();
     Q_INVOKABLE void refreshStandingOrders();
     Q_INVOKABLE void refreshRegularPayments();
+    Q_INVOKABLE void cancelDirectDebitMandate(const QString &mandateUid);
+    Q_INVOKABLE void cancelStandingOrder(const QString &paymentOrderUid);
 
 signals:
     void tokenChanged();

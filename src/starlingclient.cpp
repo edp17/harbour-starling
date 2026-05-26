@@ -220,6 +220,56 @@ void StarlingClient::refreshStandingOrders()
     });
 }
 
+void StarlingClient::cancelDirectDebitMandate(const QString &mandateUid)
+{
+    const QString trimmedUid = mandateUid.trimmed();
+
+    if (trimmedUid.isEmpty()) {
+        setStatus(QStringLiteral("Direct Debit mandate UID is missing."));
+        return;
+    }
+
+    setStatus(QStringLiteral("Cancelling Direct Debit..."));
+
+    const QString path =
+            QStringLiteral("/api/v2/direct-debit/mandates/%1").arg(trimmedUid);
+
+    sendDeleteWithToken(path, m_token, [this](const QByteArray &) {
+        setStatus(QStringLiteral("Direct Debit cancelled."));
+        refreshDirectDebitMandates();
+        touchLastUpdated();
+    });
+}
+
+void StarlingClient::cancelStandingOrder(const QString &paymentOrderUid)
+{
+    const QString trimmedUid = paymentOrderUid.trimmed();
+
+    if (trimmedUid.isEmpty()) {
+        setStatus(QStringLiteral("Standing Order UID is missing."));
+        return;
+    }
+
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    setStatus(QStringLiteral("Cancelling Standing Order..."));
+
+    const QString path =
+            QStringLiteral("/api/v2/payments/local/account/%1/category/%2/standing-orders/%3")
+            .arg(m_accountUid)
+            .arg(m_categoryUid)
+            .arg(trimmedUid);
+
+    sendDeleteWithToken(path, m_token, [this](const QByteArray &) {
+        setStatus(QStringLiteral("Standing Order cancelled."));
+        refreshStandingOrders();
+        touchLastUpdated();
+    });
+}
+
 // Payments
 QVariantList StarlingClient::sourceAccounts() const
 {

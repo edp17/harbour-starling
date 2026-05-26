@@ -30,6 +30,42 @@ Page {
 
     property var standingOrderPayeeDetail: starlingClient.payeeDetail
 
+    function requirePinThen(action) {
+        pinActionRunner.pendingAction = action
+        starlingClient.requestPinConfirmation()
+    }
+
+    function cancelStandingOrder() {
+        requirePinThen(function() {
+            starlingClient.cancelStandingOrder(page.payment.paymentOrderUid)
+            pageStack.pop()
+        })
+    }
+
+    function cancelDirectDebit() {
+        requirePinThen(function() {
+            starlingClient.cancelDirectDebitMandate(page.payment.mandateUid)
+            pageStack.pop()
+        })
+    }
+
+    QtObject {
+        id: pinActionRunner
+        property var pendingAction: null
+    }
+
+    Connections {
+        target: starlingClient
+
+        onPinConfirmed: {
+            if (pinActionRunner.pendingAction) {
+                var action = pinActionRunner.pendingAction
+                pinActionRunner.pendingAction = null
+                action()
+            }
+        }
+    }
+
     function standingOrderAccount() {
         if (!page.isStandingOrder)
             return null
@@ -175,6 +211,53 @@ Page {
                     page.field(qsTr("Updated"), page.payment.updatedAt),
                     page.field(qsTr("Cancelled at"), page.payment.cancelledAt)
                 ]
+            }
+
+            SectionHeader {
+                text: qsTr("Actions")
+                visible: page.isLiveStatus(page.payment.status)
+            }
+
+            Rectangle {
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * x
+                height: actionColumn.height + 2 * Theme.paddingMedium
+                visible: page.isLiveStatus(page.payment.status)
+
+                radius: Theme.paddingMedium
+                color: Theme.rgba(Theme.errorColor, 0.08)
+                border.width: 1
+                border.color: Theme.rgba(Theme.errorColor, 0.25)
+
+                Column {
+                    id: actionColumn
+                    x: Theme.paddingMedium
+                    y: Theme.paddingMedium
+                    width: parent.width - 2 * Theme.paddingMedium
+                    spacing: Theme.paddingMedium
+
+                    Label {
+                        width: parent.width
+                        text: page.isDirectDebit
+                              ? qsTr("Cancelling a Direct Debit stops future payments from this mandate.")
+                              : qsTr("Cancelling a Standing Order stops future scheduled payments.")
+                        color: Theme.secondaryColor
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+
+                    Button {
+                        width: parent.width
+                        text: page.isDirectDebit ? qsTr("Cancel Direct Debit")
+                                                  : qsTr("Cancel Standing Order")
+                        onClicked: {
+                            if (page.isDirectDebit)
+                                page.cancelDirectDebit()
+                            else
+                                page.cancelStandingOrder()
+                        }
+                    }
+                }
             }
         }
 
