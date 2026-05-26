@@ -232,7 +232,8 @@ void StarlingClient::cancelDirectDebitMandate(const QString &mandateUid)
     setStatus(QStringLiteral("Cancelling Direct Debit..."));
 
     const QString path =
-            QStringLiteral("/api/v2/direct-debit/mandates/%1").arg(trimmedUid);
+            QStringLiteral("/api/v2/direct-debit/mandates/%1")
+            .arg(trimmedUid);
 
     sendDeleteWithToken(path, m_token, [this](const QByteArray &) {
         setStatus(QStringLiteral("Direct Debit cancelled."));
@@ -263,11 +264,15 @@ void StarlingClient::cancelStandingOrder(const QString &paymentOrderUid)
             .arg(m_categoryUid)
             .arg(trimmedUid);
 
-    sendDeleteWithToken(path, m_token, [this](const QByteArray &) {
+    sendJsonWithToken(path,
+                      QStringLiteral("DELETE"),
+                      QJsonObject(),
+                      m_token,
+                      [this](const QByteArray &) {
         setStatus(QStringLiteral("Standing Order cancelled."));
         refreshStandingOrders();
         touchLastUpdated();
-    });
+    }, true);
 }
 
 // Payments
