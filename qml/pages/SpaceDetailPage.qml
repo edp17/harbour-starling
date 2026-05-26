@@ -56,12 +56,12 @@ Page {
         var minor = page.amountToMinorUnits(amountField.text)
 
         if (minor <= 0) {
-            starlingClient.setStatus(qsTr("Enter a valid amount."))
+            page.pageError = qsTr("Enter a valid amount.")
             return
         }
 
         if (minor > starlingClient.availableBalanceMinorUnits) {
-            starlingClient.setStatus(qsTr("Not enough available balance."))
+            page.pageError = qsTr("Not enough available balance.")
             return
         }
 
@@ -83,7 +83,7 @@ Page {
         }
 
         if (minor > potBalance) {
-            starlingClient.setStatus(qsTr("This savings goal does not have enough money."))
+            page.pageError = qsTr("This savings goal does not have enough money.")
             return
         }
 
@@ -219,6 +219,7 @@ Page {
             }
 
             Rectangle {
+                // Actions card
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * x
                 height: actionColumn.height + 2 * Theme.paddingMedium
@@ -271,19 +272,20 @@ Page {
                         }
                     }
                 }
+            }
 
-                Label {
-                    x: Theme.horizontalPageMargin
-                    width: parent.width - 2 * x
-                    visible: page.pageError.length > 0 || starlingClient.status.length > 0
-                    text: page.pageError.length > 0 ? page.pageError : starlingClient.status
-                    color: page.pageError.length > 0 ? Theme.errorColor : Theme.secondaryColor
-                    wrapMode: Text.Wrap
-                    font.pixelSize: Theme.fontSizeSmall
-                }
+            Label {
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * x
+                visible: page.pageError.length > 0 || starlingClient.status.length > 0
+                text: page.pageError.length > 0 ? page.pageError : starlingClient.status
+                color: page.pageError.length > 0 ? Theme.errorColor : Theme.secondaryColor
+                wrapMode: Text.Wrap
+                font.pixelSize: Theme.fontSizeSmall
             }
 
             Rectangle {
+                // Delete card
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * x
                 height: deleteColumn.height + 2 * Theme.paddingMedium
