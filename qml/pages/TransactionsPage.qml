@@ -98,6 +98,12 @@ Page {
             MenuItem {
                 enabled: page.readyForContent
                 visible: page.readyForContent
+                text: qsTr("Statements")
+                onClicked: pageStack.push(Qt.resolvedUrl("StatementsPage.qml"))
+            }
+            MenuItem {
+                enabled: page.readyForContent
+                visible: page.readyForContent
                 text: qsTr("Refresh current filter")
                 onClicked: page.refreshCurrentFilter()
             }

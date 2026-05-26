@@ -6,6 +6,9 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QFile>
+#include <QDir>
+#include <QStandardPaths>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QUrlQuery>
@@ -62,6 +65,101 @@ StarlingClient::StarlingClient(QObject *parent)
                 && !m_busy) {
             refreshAll(m_startupDaysBack > 0 ? m_startupDaysBack : 14);
         }
+    });
+}
+
+// Statements
+QString StarlingClient::lastStatementCsvPath() const
+{
+    return m_lastStatementCsvPath;
+}
+
+void StarlingClient::downloadStatementCsvPeriod(const QString &yearMonth)
+{
+    if (m_accountUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedYearMonth = yearMonth.trimmed();
+    const QDate period = QDate::fromString(trimmedYearMonth + QStringLiteral("-01"), Qt::ISODate);
+
+    if (!period.isValid()) {
+        setStatus(QStringLiteral("Invalid statement period. Use YYYY-MM."));
+        return;
+    }
+
+    if (start > end) {
+        setStatus(QStringLiteral("Start date must be before end date."));
+        return;
+    }
+
+    QUrl url(QStringLiteral("https://api.starlingbank.com/api/v2/accounts/%1/statement/download")
+             .arg(m_accountUid));
+
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("yearMonth"), trimmedYearMonth);
+    url.setQuery(query);
+
+    QNetworkRequest req(url);
+    req.setRawHeader("Authorization", QByteArray("Bearer ") + m_token.toUtf8());
+    req.setRawHeader("Accept", "text/csv");
+
+    setStatus(QStringLiteral("Downloading statement CSV..."));
+    beginRequest();
+
+    QNetworkReply *rep = m_nam.get(req);
+
+    connect(rep, &QNetworkReply::finished, this, [this, rep, trimmedYearMonth]() {
+        const QByteArray body = rep->readAll();
+
+        if (rep->error() != QNetworkReply::NoError) {
+            qWarning() << "downloadStatementCsvRange failed url=" << rep->url()
+                       << "status=" << rep->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt()
+                       << "qtError=" << rep->errorString()
+                       << "body=" << QString::fromUtf8(body);
+
+            setStatus(QStringLiteral("Statement CSV download failed: %1").arg(rep->errorString()));
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        const QString docsRoot = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+        QDir dir(docsRoot + QStringLiteral("/Starling Statements"));
+
+        if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
+            setStatus(QStringLiteral("Could not create statement export folder."));
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        const QString fileName =
+                QStringLiteral("starling-statement-%1.csv")
+                .arg(trimmedYearMonth);
+
+        const QString filePath = dir.filePath(fileName);
+
+        QFile file(filePath);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            setStatus(QStringLiteral("Could not save statement CSV."));
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        file.write(body);
+        file.close();
+
+        m_lastStatementCsvPath = filePath;
+        emit lastStatementCsvPathChanged();
+
+        touchLastUpdated();
+        setStatus(QStringLiteral("Statement CSV saved: %1").arg(filePath));
+
+        rep->deleteLater();
+        endRequest();
     });
 }
 
