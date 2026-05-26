@@ -71,6 +71,7 @@ class StarlingClient : public QObject
     Q_PROPERTY(QVariantList directDebitMandates READ directDebitMandates NOTIFY directDebitMandatesChanged)
     Q_PROPERTY(QVariantList standingOrders READ standingOrders NOTIFY standingOrdersChanged)
     Q_PROPERTY(QString lastFeedExportCsvPath READ lastFeedExportCsvPath NOTIFY lastFeedExportCsvPathChanged)
+    Q_PROPERTY(QVariantList spaces READ spaces NOTIFY spacesChanged)
 
 public:
     explicit StarlingClient(QObject *parent = nullptr);
@@ -117,6 +118,9 @@ public:
     QVariantList directDebitMandates() const;
     QVariantList standingOrders() const;
     QString lastFeedExportCsvPath() const;
+
+    QVariantList spaces() const;
+    Q_INVOKABLE void refreshSpaces();
 
     // invokables
     Q_INVOKABLE void discoverAccount();
@@ -341,6 +345,7 @@ signals:
     void directDebitMandatesChanged();
     void standingOrdersChanged();
     void lastFeedExportCsvPathChanged();
+    void spacesChanged();
 
 private:
     // helpers
@@ -498,6 +503,7 @@ private:
     QVariantList m_directDebitMandates;
     QVariantList m_standingOrders;
     QString m_lastFeedExportCsvPath;
+    QVariantList m_spaces;
 };
 
 #endif // STARLINGCLIENT_H

@@ -45,7 +45,7 @@ Page {
             spacing: Theme.paddingMedium
 
             PageHeader {
-                title: qsTr("Feed export")
+                title: qsTr("Transaction export")
             }
 
             Rectangle {
@@ -67,7 +67,7 @@ Page {
 
                     Label {
                         width: parent.width
-                        text: qsTr("Export transaction feed")
+                        text: qsTr("Export transactions")
                         color: Theme.highlightColor
                         font.pixelSize: Theme.fontSizeLarge
                         font.bold: true
@@ -75,7 +75,7 @@ Page {
 
                     Label {
                         width: parent.width
-                        text: qsTr("Choose a date range and save a CSV feed export to Documents/Starling Feed Exports.")
+                        text: qsTr("Save your transactions for the selected date range as a CSV file. You can open it later with a spreadsheet app.")
                         color: Theme.secondaryColor
                         wrapMode: Text.Wrap
                         font.pixelSize: Theme.fontSizeSmall
@@ -102,7 +102,7 @@ Page {
                     Button {
                         width: parent.width
                         enabled: page.readyForContent && !starlingClient.busy
-                        text: starlingClient.busy ? qsTr("Downloading...") : qsTr("Download CSV")
+                        text: starlingClient.busy ? qsTr("Saving...") : qsTr("Save transactions")
                         onClicked: starlingClient.downloadFeedExportCsvRange(startField.text.trim(),
                                                                              endField.text.trim())
                     }
@@ -137,7 +137,7 @@ Page {
         anchors.fill: parent
         visible: starlingClient.locked
         title: qsTr("App locked")
-        message: qsTr("Authenticate to export feed.")
+        message: qsTr("Authenticate to export transactions.")
         busy: starlingClient.busy
         z: 998
         onUnlockRequested: starlingClient.unlock()

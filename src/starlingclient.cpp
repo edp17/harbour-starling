@@ -68,7 +68,100 @@ StarlingClient::StarlingClient(QObject *parent)
     });
 }
 
-// Feed Export Csv - Statements/transactions
+// Spaces
+QVariantList StarlingClient::spaces() const
+{
+    return m_spaces;
+}
+
+void StarlingClient::refreshSpaces()
+{
+    if (m_accountUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    setStatus(QStringLiteral("Loading spaces..."));
+
+    const QString path =
+            QStringLiteral("/api/v2/account/%1/spaces")
+            .arg(m_accountUid);
+
+    getJson(path, [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QJsonArray items = root.value(QStringLiteral("spaces")).toArray();
+
+        if (items.isEmpty())
+            items = root.value(QStringLiteral("savingsGoals")).toArray();
+
+        QVariantList rows;
+
+        for (int i = 0; i < items.size(); ++i) {
+            const QJsonObject item = items.at(i).toObject();
+
+            QVariantMap row;
+
+            const QString spaceUid = item.value(QStringLiteral("spaceUid")).toString(
+                        item.value(QStringLiteral("savingsGoalUid")).toString());
+
+            const QString name = item.value(QStringLiteral("name")).toString(
+                        item.value(QStringLiteral("savingsGoalName")).toString());
+
+            const QString type = item.value(QStringLiteral("spaceType")).toString(
+                        item.value(QStringLiteral("type")).toString());
+
+            const QJsonObject balance =
+                    item.value(QStringLiteral("balance")).toObject();
+
+            const QJsonObject target =
+                    item.value(QStringLiteral("target")).toObject();
+
+            const QJsonObject savedAmount =
+                    item.value(QStringLiteral("savedAmount")).toObject();
+
+            const QJsonObject totalSaved =
+                    item.value(QStringLiteral("totalSaved")).toObject();
+
+            const QJsonObject balanceAmount =
+                    !balance.isEmpty() ? balance
+                                       : (!savedAmount.isEmpty() ? savedAmount : totalSaved);
+
+            const QString currency =
+                    balanceAmount.value(QStringLiteral("currency")).toString(QStringLiteral("GBP"));
+
+            const qint64 balanceMinor =
+                    balanceAmount.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
+
+            const QString targetCurrency =
+                    target.value(QStringLiteral("currency")).toString(currency);
+
+            const qint64 targetMinor =
+                    target.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
+
+            row.insert(QStringLiteral("spaceUid"), spaceUid);
+            row.insert(QStringLiteral("name"), name.isEmpty() ? QStringLiteral("Space") : name);
+            row.insert(QStringLiteral("type"), type);
+            row.insert(QStringLiteral("state"), item.value(QStringLiteral("state")).toString());
+            row.insert(QStringLiteral("balance"), formatMinorUnits(balanceMinor, currency));
+            row.insert(QStringLiteral("target"), targetMinor > 0 ? formatMinorUnits(targetMinor, targetCurrency) : QString());
+            row.insert(QStringLiteral("currency"), currency);
+            row.insert(QStringLiteral("createdAt"), formatIsoDateTime(item.value(QStringLiteral("createdAt")).toString()));
+            row.insert(QStringLiteral("updatedAt"), formatIsoDateTime(item.value(QStringLiteral("updatedAt")).toString()));
+
+            rows.append(row);
+        }
+
+        m_spaces = rows;
+        emit spacesChanged();
+
+        touchLastUpdated();
+        setStatus(QStringLiteral("Loaded %1 space(s).").arg(rows.size()));
+    });
+}
+
+// Feed Extract Csv - Statements/transactions
 QString StarlingClient::lastFeedExportCsvPath() const
 {
     return m_lastFeedExportCsvPath;
@@ -88,7 +181,7 @@ void StarlingClient::downloadFeedExportCsvRange(const QString &startDate, const 
     const QDate end = QDate::fromString(trimmedEndDate, Qt::ISODate);
 
     if (!start.isValid() || !end.isValid()) {
-        setStatus(QStringLiteral("Invalid feed export date range."));
+        setStatus(QStringLiteral("Invalid transaction export date range."));
         return;
     }
 
@@ -124,24 +217,24 @@ void StarlingClient::downloadFeedExportCsvRange(const QString &startDate, const 
                        << "qtError=" << rep->errorString()
                        << "body=" << QString::fromUtf8(body);
 
-            setStatus(QStringLiteral("Feed export CSV download failed: %1").arg(rep->errorString()));
+            setStatus(QStringLiteral("Transaction export CSV download failed: %1").arg(rep->errorString()));
             rep->deleteLater();
             endRequest();
             return;
         }
 
         const QString docsRoot = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
-        QDir dir(docsRoot + QStringLiteral("/Starling Feed Exports"));
+        QDir dir(docsRoot + QStringLiteral("/Starling Transaction Exports"));
 
         if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
-            setStatus(QStringLiteral("Could not create feed export folder."));
+            setStatus(QStringLiteral("Could not create trasnaction export folder."));
             rep->deleteLater();
             endRequest();
             return;
         }
 
         const QString fileName =
-                QStringLiteral("starling-feed-export-%1-to-%2.csv")
+                QStringLiteral("starling-transaction-export-%1-to-%2.csv")
                 .arg(trimmedStartDate)
                 .arg(trimmedEndDate);
 
@@ -149,7 +242,7 @@ void StarlingClient::downloadFeedExportCsvRange(const QString &startDate, const 
 
         QFile file(filePath);
         if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-            setStatus(QStringLiteral("Could not save feed export CSV."));
+            setStatus(QStringLiteral("Could not save transaction export CSV."));
             rep->deleteLater();
             endRequest();
             return;
@@ -162,7 +255,7 @@ void StarlingClient::downloadFeedExportCsvRange(const QString &startDate, const 
         emit lastFeedExportCsvPathChanged();
 
         touchLastUpdated();
-        setStatus(QStringLiteral("Feed export CSV saved: %1").arg(filePath));
+        setStatus(QStringLiteral("Transaction export CSV saved: %1").arg(filePath));
 
         rep->deleteLater();
         endRequest();
