@@ -74,6 +74,11 @@ QVariantList StarlingClient::spaces() const
     return m_spaces;
 }
 
+qint64 StarlingClient::availableBalanceMinorUnits() const
+{
+    return m_availableBalanceMinorUnits;
+}
+
 void StarlingClient::refreshSpaces()
 {
     if (m_accountUid.isEmpty()) {
@@ -149,6 +154,7 @@ void StarlingClient::refreshSpaces()
             row.insert(QStringLiteral("currency"), currency);
             row.insert(QStringLiteral("createdAt"), formatIsoDateTime(item.value(QStringLiteral("createdAt")).toString()));
             row.insert(QStringLiteral("updatedAt"), formatIsoDateTime(item.value(QStringLiteral("updatedAt")).toString()));
+            row.insert(QStringLiteral("balanceMinorUnits"), balanceMinor);
 
             rows.append(row);
         }
@@ -293,6 +299,35 @@ void StarlingClient::transferSavingsGoalMoney(const QString &savingsGoalUid,
         touchLastUpdated();
         emit savingsGoalTransferCompleted();
     }, false);
+}
+
+void StarlingClient::deleteSavingsGoal(const QString &savingsGoalUid)
+{
+    if (m_accountUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedGoalUid = savingsGoalUid.trimmed();
+    if (trimmedGoalUid.isEmpty()) {
+        setStatus(QStringLiteral("Savings goal UID is missing."));
+        return;
+    }
+
+    setStatus(QStringLiteral("Deleting savings goal..."));
+
+    const QString path =
+            QStringLiteral("/api/v2/account/%1/savings-goals/%2")
+            .arg(m_accountUid)
+            .arg(trimmedGoalUid);
+
+    sendDeleteWithToken(path, m_token, [this](const QByteArray &) {
+        setStatus(QStringLiteral("Savings goal deleted."));
+        refreshSpaces();
+        refreshBalance();
+        touchLastUpdated();
+        emit savingsGoalDeleted();
+    });
 }
 
 // Feed Extract Csv - Statements/transactions
@@ -3774,10 +3809,14 @@ void StarlingClient::refreshBalance()
         const QJsonObject effective = root.value("effectiveBalance").toObject();
 
         m_currency = effective.value("currency").toString("GBP");
-        m_clearedBalance = formatMinorUnits(
-                    cleared.value("minorUnits").toVariant().toLongLong(), m_currency);
-        m_availableBalance = formatMinorUnits(
-                    effective.value("minorUnits").toVariant().toLongLong(), m_currency);
+
+        const qint64 clearedMinor = cleared.value("minorUnits").toVariant().toLongLong();
+        const qint64 effectiveMinor = effective.value("minorUnits").toVariant().toLongLong();
+
+        m_availableBalanceMinorUnits = effectiveMinor;
+
+        m_clearedBalance = formatMinorUnits(clearedMinor, m_currency);
+        m_availableBalance = formatMinorUnits(effectiveMinor, m_currency);
 
         emit balanceChanged();
         touchLastUpdated();

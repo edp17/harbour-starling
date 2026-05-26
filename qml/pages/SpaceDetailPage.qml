@@ -25,6 +25,25 @@ Page {
 
     property var space: ({})
     property bool transferRequested: false
+    property bool deleteRequested: false
+    property string pageError: ""
+
+    function amountToMinorUnits(text) {
+        var cleaned = (text || "").trim().replace(",", ".")
+        var amount = parseFloat(cleaned)
+
+        if (isNaN(amount) || amount <= 0)
+            return -1
+
+        return Math.round(amount * 100)
+    }
+
+    function deleteGoal() {
+        deleteRequested = true
+        requirePinThen(function() {
+            starlingClient.deleteSavingsGoal(page.space.spaceUid)
+        })
+    }
 
     function requirePinThen(action) {
         pinActionRunner.pendingAction = action
@@ -32,6 +51,20 @@ Page {
     }
 
     function addMoney() {
+        page.pageError = ""
+
+        var minor = page.amountToMinorUnits(amountField.text)
+
+        if (minor <= 0) {
+            starlingClient.setStatus(qsTr("Enter a valid amount."))
+            return
+        }
+
+        if (minor > starlingClient.availableBalanceMinorUnits) {
+            starlingClient.setStatus(qsTr("Not enough available balance."))
+            return
+        }
+
         transferRequested = true
         requirePinThen(function() {
             starlingClient.addMoneyToSavingsGoal(page.space.spaceUid, amountField.text.trim())
@@ -39,6 +72,21 @@ Page {
     }
 
     function withdrawMoney() {
+        page.pageError = ""
+
+        var minor = page.amountToMinorUnits(amountField.text)
+        var potBalance = page.space.balanceMinorUnits || 0
+
+        if (minor <= 0) {
+            starlingClient.setStatus(qsTr("Enter a valid amount."))
+            return
+        }
+
+        if (minor > potBalance) {
+            starlingClient.setStatus(qsTr("This savings goal does not have enough money."))
+            return
+        }
+
         transferRequested = true
         requirePinThen(function() {
             starlingClient.withdrawMoneyFromSavingsGoal(page.space.spaceUid, amountField.text.trim())
@@ -201,6 +249,7 @@ Page {
                         label: qsTr("Amount")
                         placeholderText: qsTr("10.00")
                         inputMethodHints: Qt.ImhFormattedNumbersOnly
+                        onTextChanged: page.pageError = ""
                     }
 
                     Row {
@@ -222,9 +271,62 @@ Page {
                         }
                     }
                 }
+
+                Label {
+                    x: Theme.horizontalPageMargin
+                    width: parent.width - 2 * x
+                    visible: page.pageError.length > 0 || starlingClient.status.length > 0
+                    text: page.pageError.length > 0 ? page.pageError : starlingClient.status
+                    color: page.pageError.length > 0 ? Theme.errorColor : Theme.secondaryColor
+                    wrapMode: Text.Wrap
+                    font.pixelSize: Theme.fontSizeSmall
+                }
             }
 
+            Rectangle {
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * x
+                height: deleteColumn.height + 2 * Theme.paddingMedium
 
+                radius: Theme.paddingMedium
+                color: Theme.rgba(Theme.errorColor, 0.08)
+                border.width: 1
+                border.color: Theme.rgba(Theme.errorColor, 0.25)
+
+                Column {
+                    id: deleteColumn
+                    x: Theme.paddingMedium
+                    y: Theme.paddingMedium
+                    width: parent.width - 2 * Theme.paddingMedium
+                    spacing: Theme.paddingMedium
+
+                    Label {
+                        width: parent.width
+                        text: qsTr("Delete this savings goal when you no longer need it.")
+                        color: Theme.secondaryColor
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: page.space.balanceMinorUnits > 0
+                        text: qsTr("Withdraw all money before deleting this savings goal.")
+                        color: Theme.errorColor
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+
+                    Button {
+                        width: parent.width
+                        enabled: !starlingClient.busy
+                                 && (!page.space.balanceMinorUnits
+                                     || page.space.balanceMinorUnits <= 0)
+                        text: qsTr("Delete savings goal")
+                        onClicked: page.deleteGoal()
+                    }
+                }
+            }
         }
 
         VerticalScrollDecorator {}
@@ -254,6 +356,13 @@ Page {
         onSavingsGoalTransferCompleted: {
             if (page.transferRequested) {
                 page.transferRequested = false
+                pageStack.pop()
+            }
+        }
+
+        onSavingsGoalDeleted: {
+            if (page.deleteRequested) {
+                page.deleteRequested = false
                 pageStack.pop()
             }
         }

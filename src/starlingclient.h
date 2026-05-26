@@ -72,6 +72,7 @@ class StarlingClient : public QObject
     Q_PROPERTY(QVariantList standingOrders READ standingOrders NOTIFY standingOrdersChanged)
     Q_PROPERTY(QString lastFeedExportCsvPath READ lastFeedExportCsvPath NOTIFY lastFeedExportCsvPathChanged)
     Q_PROPERTY(QVariantList spaces READ spaces NOTIFY spacesChanged)
+    Q_PROPERTY(qint64 availableBalanceMinorUnits READ availableBalanceMinorUnits NOTIFY balanceChanged)
 
 public:
     explicit StarlingClient(QObject *parent = nullptr);
@@ -121,6 +122,8 @@ public:
 
     QVariantList spaces() const;
     Q_INVOKABLE void refreshSpaces();
+
+    qint64 availableBalanceMinorUnits() const;
 
     // invokables
     Q_INVOKABLE void discoverAccount();
@@ -307,6 +310,7 @@ public:
     Q_INVOKABLE void createSavingsGoal(const QString &name, const QString &targetAmount);
     Q_INVOKABLE void addMoneyToSavingsGoal(const QString &savingsGoalUid, const QString &amount);
     Q_INVOKABLE void withdrawMoneyFromSavingsGoal(const QString &savingsGoalUid, const QString &amount);
+    Q_INVOKABLE void deleteSavingsGoal(const QString &savingsGoalUid);
 
 signals:
     void tokenChanged();
@@ -351,6 +355,7 @@ signals:
     void spacesChanged();
     void savingsGoalCreated();
     void savingsGoalTransferCompleted();
+    void savingsGoalDeleted();
 
 private:
     // helpers
@@ -510,6 +515,8 @@ private:
     QVariantList m_standingOrders;
     QString m_lastFeedExportCsvPath;
     QVariantList m_spaces;
+
+    qint64 m_availableBalanceMinorUnits = 0;
 };
 
 #endif // STARLINGCLIENT_H
