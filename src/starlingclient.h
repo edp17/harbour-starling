@@ -70,7 +70,7 @@ class StarlingClient : public QObject
 
     Q_PROPERTY(QVariantList directDebitMandates READ directDebitMandates NOTIFY directDebitMandatesChanged)
     Q_PROPERTY(QVariantList standingOrders READ standingOrders NOTIFY standingOrdersChanged)
-    Q_PROPERTY(QString lastStatementCsvPath READ lastStatementCsvPath NOTIFY lastStatementCsvPathChanged)
+    Q_PROPERTY(QString lastFeedExportCsvPath READ lastFeedExportCsvPath NOTIFY lastFeedExportCsvPathChanged)
 
 public:
     explicit StarlingClient(QObject *parent = nullptr);
@@ -116,7 +116,7 @@ public:
 
     QVariantList directDebitMandates() const;
     QVariantList standingOrders() const;
-    QString lastStatementCsvPath() const;
+    QString lastFeedExportCsvPath() const;
 
     // invokables
     Q_INVOKABLE void discoverAccount();
@@ -299,7 +299,7 @@ public:
     Q_INVOKABLE void refreshRegularPayments();
     Q_INVOKABLE void cancelDirectDebitMandate(const QString &mandateUid);
     Q_INVOKABLE void cancelStandingOrder(const QString &paymentOrderUid);
-    Q_INVOKABLE void downloadStatementCsvPeriod(const QString &yearMonth);
+    Q_INVOKABLE void downloadFeedExportCsvRange(const QString &startDate, const QString &endDate);
 
 signals:
     void tokenChanged();
@@ -340,7 +340,7 @@ signals:
     void onlineChanged();
     void directDebitMandatesChanged();
     void standingOrdersChanged();
-    void lastStatementCsvPathChanged();
+    void lastFeedExportCsvPathChanged();
 
 private:
     // helpers
@@ -497,7 +497,7 @@ private:
 
     QVariantList m_directDebitMandates;
     QVariantList m_standingOrders;
-    QString m_lastStatementCsvPath;
+    QString m_lastFeedExportCsvPath;
 };
 
 #endif // STARLINGCLIENT_H

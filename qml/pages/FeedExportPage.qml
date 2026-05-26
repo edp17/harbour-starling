@@ -45,7 +45,7 @@ Page {
             spacing: Theme.paddingMedium
 
             PageHeader {
-                title: qsTr("Statements")
+                title: qsTr("Feed export")
             }
 
             Rectangle {
@@ -67,7 +67,7 @@ Page {
 
                     Label {
                         width: parent.width
-                        text: qsTr("Export CSV statement")
+                        text: qsTr("Export transaction feed")
                         color: Theme.highlightColor
                         font.pixelSize: Theme.fontSizeLarge
                         font.bold: true
@@ -75,18 +75,27 @@ Page {
 
                     Label {
                         width: parent.width
-                        text: qsTr("Choose a date range and save a CSV statement to Documents/Starling Statements.")
+                        text: qsTr("Choose a date range and save a CSV feed export to Documents/Starling Feed Exports.")
                         color: Theme.secondaryColor
                         wrapMode: Text.Wrap
                         font.pixelSize: Theme.fontSizeSmall
                     }
 
                     TextField {
-                        id: periodField
+                        id: startField
                         width: parent.width
-                        label: qsTr("Statement month")
-                        placeholderText: qsTr("YYYY-MM")
-                        text: new Date().toISOString().substring(0, 7)
+                        label: qsTr("Start date")
+                        placeholderText: qsTr("YYYY-MM-DD")
+                        text: page.daysAgoIsoDate(30)
+                        inputMethodHints: Qt.ImhDigitsOnly
+                    }
+
+                    TextField {
+                        id: endField
+                        width: parent.width
+                        label: qsTr("End date")
+                        placeholderText: qsTr("YYYY-MM-DD")
+                        text: page.todayIsoDate()
                         inputMethodHints: Qt.ImhDigitsOnly
                     }
 
@@ -94,7 +103,8 @@ Page {
                         width: parent.width
                         enabled: page.readyForContent && !starlingClient.busy
                         text: starlingClient.busy ? qsTr("Downloading...") : qsTr("Download CSV")
-                        onClicked: starlingClient.downloadStatementCsvPeriod(periodField.text.trim())
+                        onClicked: starlingClient.downloadFeedExportCsvRange(startField.text.trim(),
+                                                                             endField.text.trim())
                     }
                 }
             }
@@ -102,8 +112,8 @@ Page {
             Label {
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * x
-                visible: starlingClient.lastStatementCsvPath.length > 0
-                text: qsTr("Last saved:\n%1").arg(starlingClient.lastStatementCsvPath)
+                visible: starlingClient.lastFeedExportCsvPath.length > 0
+                text: qsTr("Last saved:\n%1").arg(starlingClient.lastFeedExportCsvPath)
                 color: Theme.secondaryColor
                 wrapMode: Text.WrapAnywhere
                 font.pixelSize: Theme.fontSizeSmall
@@ -127,7 +137,7 @@ Page {
         anchors.fill: parent
         visible: starlingClient.locked
         title: qsTr("App locked")
-        message: qsTr("Authenticate to export statements.")
+        message: qsTr("Authenticate to export feed.")
         busy: starlingClient.busy
         z: 998
         onUnlockRequested: starlingClient.unlock()

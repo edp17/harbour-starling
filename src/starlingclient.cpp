@@ -68,24 +68,27 @@ StarlingClient::StarlingClient(QObject *parent)
     });
 }
 
-// Statements
-QString StarlingClient::lastStatementCsvPath() const
+// Feed Export Csv - Statements/transactions
+QString StarlingClient::lastFeedExportCsvPath() const
 {
-    return m_lastStatementCsvPath;
+    return m_lastFeedExportCsvPath;
 }
 
-void StarlingClient::downloadStatementCsvPeriod(const QString &yearMonth)
+void StarlingClient::downloadFeedExportCsvRange(const QString &startDate, const QString &endDate)
 {
     if (m_accountUid.isEmpty()) {
         setStatus(QStringLiteral("Account details are missing."));
         return;
     }
 
-    const QString trimmedYearMonth = yearMonth.trimmed();
-    const QDate period = QDate::fromString(trimmedYearMonth + QStringLiteral("-01"), Qt::ISODate);
+    const QString trimmedStartDate = startDate.trimmed();
+    const QString trimmedEndDate = endDate.trimmed();
 
-    if (!period.isValid()) {
-        setStatus(QStringLiteral("Invalid statement period. Use YYYY-MM."));
+    const QDate start = QDate::fromString(trimmedStartDate, Qt::ISODate);
+    const QDate end = QDate::fromString(trimmedEndDate, Qt::ISODate);
+
+    if (!start.isValid() || !end.isValid()) {
+        setStatus(QStringLiteral("Invalid feed export date range."));
         return;
     }
 
@@ -94,56 +97,59 @@ void StarlingClient::downloadStatementCsvPeriod(const QString &yearMonth)
         return;
     }
 
-    QUrl url(QStringLiteral("https://api.starlingbank.com/api/v2/accounts/%1/statement/download")
+    QUrl url(QStringLiteral("%1/api/v2/accounts/%2/feed-export")
+             .arg(QString::fromLatin1(BASE_URL))
              .arg(m_accountUid));
 
     QUrlQuery query;
-    query.addQueryItem(QStringLiteral("yearMonth"), trimmedYearMonth);
+    query.addQueryItem(QStringLiteral("start"), trimmedStartDate);
+    query.addQueryItem(QStringLiteral("end"), trimmedEndDate);
     url.setQuery(query);
 
     QNetworkRequest req(url);
     req.setRawHeader("Authorization", QByteArray("Bearer ") + m_token.toUtf8());
     req.setRawHeader("Accept", "text/csv");
 
-    setStatus(QStringLiteral("Downloading statement CSV..."));
+    setStatus(QStringLiteral("Downloading feed export CSV..."));
     beginRequest();
 
     QNetworkReply *rep = m_nam.get(req);
 
-    connect(rep, &QNetworkReply::finished, this, [this, rep, trimmedYearMonth]() {
+    connect(rep, &QNetworkReply::finished, this, [this, rep, trimmedStartDate, trimmedEndDate]() {
         const QByteArray body = rep->readAll();
 
         if (rep->error() != QNetworkReply::NoError) {
-            qWarning() << "downloadStatementCsvRange failed url=" << rep->url()
+            qWarning() << "downloadFeedExportCsvRange failed url=" << rep->url()
                        << "status=" << rep->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt()
                        << "qtError=" << rep->errorString()
                        << "body=" << QString::fromUtf8(body);
 
-            setStatus(QStringLiteral("Statement CSV download failed: %1").arg(rep->errorString()));
+            setStatus(QStringLiteral("Feed export CSV download failed: %1").arg(rep->errorString()));
             rep->deleteLater();
             endRequest();
             return;
         }
 
         const QString docsRoot = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
-        QDir dir(docsRoot + QStringLiteral("/Starling Statements"));
+        QDir dir(docsRoot + QStringLiteral("/Starling Feed Exports"));
 
         if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
-            setStatus(QStringLiteral("Could not create statement export folder."));
+            setStatus(QStringLiteral("Could not create feed export folder."));
             rep->deleteLater();
             endRequest();
             return;
         }
 
         const QString fileName =
-                QStringLiteral("starling-statement-%1.csv")
-                .arg(trimmedYearMonth);
+                QStringLiteral("starling-feed-export-%1-to-%2.csv")
+                .arg(trimmedStartDate)
+                .arg(trimmedEndDate);
 
         const QString filePath = dir.filePath(fileName);
 
         QFile file(filePath);
         if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-            setStatus(QStringLiteral("Could not save statement CSV."));
+            setStatus(QStringLiteral("Could not save feed export CSV."));
             rep->deleteLater();
             endRequest();
             return;
@@ -152,11 +158,11 @@ void StarlingClient::downloadStatementCsvPeriod(const QString &yearMonth)
         file.write(body);
         file.close();
 
-        m_lastStatementCsvPath = filePath;
-        emit lastStatementCsvPathChanged();
+        m_lastFeedExportCsvPath = filePath;
+        emit lastFeedExportCsvPathChanged();
 
         touchLastUpdated();
-        setStatus(QStringLiteral("Statement CSV saved: %1").arg(filePath));
+        setStatus(QStringLiteral("Feed export CSV saved: %1").arg(filePath));
 
         rep->deleteLater();
         endRequest();

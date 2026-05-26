@@ -98,8 +98,8 @@ Page {
             MenuItem {
                 enabled: page.readyForContent
                 visible: page.readyForContent
-                text: qsTr("Statements")
-                onClicked: pageStack.push(Qt.resolvedUrl("StatementsPage.qml"))
+                text: qsTr("Feed export")
+                onClicked: pageStack.push(Qt.resolvedUrl("FeedExportPage.qml"))
             }
             MenuItem {
                 enabled: page.readyForContent
