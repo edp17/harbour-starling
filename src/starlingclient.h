@@ -304,6 +304,7 @@ public:
     Q_INVOKABLE void cancelDirectDebitMandate(const QString &mandateUid);
     Q_INVOKABLE void cancelStandingOrder(const QString &paymentOrderUid);
     Q_INVOKABLE void downloadFeedExportCsvRange(const QString &startDate, const QString &endDate);
+    Q_INVOKABLE void createSavingsGoal(const QString &name, const QString &targetAmount);
 
 signals:
     void tokenChanged();
@@ -346,6 +347,7 @@ signals:
     void standingOrdersChanged();
     void lastFeedExportCsvPathChanged();
     void spacesChanged();
+    void savingsGoalCreated();
 
 private:
     // helpers

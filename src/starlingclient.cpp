@@ -161,6 +161,60 @@ void StarlingClient::refreshSpaces()
     });
 }
 
+// Saving goals
+void StarlingClient::createSavingsGoal(const QString &name, const QString &targetAmount)
+{
+    if (m_accountUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedName = name.trimmed();
+    if (trimmedName.isEmpty()) {
+        setStatus(QStringLiteral("Savings goal name is missing."));
+        return;
+    }
+
+    QString amountText = targetAmount.trimmed();
+    amountText.replace(QStringLiteral(","), QStringLiteral("."));
+
+    bool ok = false;
+    const double amountMajor = amountText.toDouble(&ok);
+
+    if (!ok || amountMajor <= 0.0) {
+        setStatus(QStringLiteral("Invalid target amount."));
+        return;
+    }
+
+    const qint64 minorUnits = qRound64(amountMajor * 100.0);
+
+    QJsonObject target;
+    target.insert(QStringLiteral("currency"), QStringLiteral("GBP"));
+    target.insert(QStringLiteral("minorUnits"), minorUnits);
+
+    QJsonObject body;
+    body.insert(QStringLiteral("name"), trimmedName);
+    body.insert(QStringLiteral("currency"), QStringLiteral("GBP"));
+    body.insert(QStringLiteral("target"), target);
+
+    const QString path =
+            QStringLiteral("/api/v2/account/%1/savings-goals")
+            .arg(m_accountUid);
+
+    setStatus(QStringLiteral("Creating savings goal..."));
+
+    sendJsonWithToken(path,
+                      QStringLiteral("PUT"),
+                      body,
+                      m_token,
+                      [this](const QByteArray &) {
+        setStatus(QStringLiteral("Savings goal created."));
+        refreshSpaces();
+        touchLastUpdated();
+        emit savingsGoalCreated();
+    }, false);
+}
+
 // Feed Extract Csv - Statements/transactions
 QString StarlingClient::lastFeedExportCsvPath() const
 {

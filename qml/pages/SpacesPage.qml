@@ -36,6 +36,12 @@ Page {
                 text: qsTr("Refresh")
                 onClicked: starlingClient.refreshSpaces()
             }
+            MenuItem {
+                enabled: page.readyForContent
+                visible: page.readyForContent
+                text: qsTr("Create savings goal")
+                onClicked: pageStack.push(Qt.resolvedUrl("CreateSavingsGoalPage.qml"))
+            }
         }
 
         Column {
