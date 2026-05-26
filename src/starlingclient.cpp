@@ -215,6 +215,86 @@ void StarlingClient::createSavingsGoal(const QString &name, const QString &targe
     }, false);
 }
 
+void StarlingClient::addMoneyToSavingsGoal(const QString &savingsGoalUid, const QString &amount)
+{
+    transferSavingsGoalMoney(savingsGoalUid, amount, true);
+}
+
+void StarlingClient::withdrawMoneyFromSavingsGoal(const QString &savingsGoalUid, const QString &amount)
+{
+    transferSavingsGoalMoney(savingsGoalUid, amount, false);
+}
+
+void StarlingClient::transferSavingsGoalMoney(const QString &savingsGoalUid,
+                                              const QString &amount,
+                                              bool addMoney)
+{
+    if (m_accountUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedGoalUid = savingsGoalUid.trimmed();
+    if (trimmedGoalUid.isEmpty()) {
+        setStatus(QStringLiteral("Savings goal UID is missing."));
+        return;
+    }
+
+    QString amountText = amount.trimmed();
+    amountText.replace(QStringLiteral(","), QStringLiteral("."));
+
+    bool ok = false;
+    const double amountMajor = amountText.toDouble(&ok);
+
+    if (!ok || amountMajor <= 0.0) {
+        setStatus(QStringLiteral("Invalid amount."));
+        return;
+    }
+
+    const qint64 minorUnits = qRound64(amountMajor * 100.0);
+
+    QJsonObject money;
+    money.insert(QStringLiteral("currency"), QStringLiteral("GBP"));
+    money.insert(QStringLiteral("minorUnits"), minorUnits);
+
+    QJsonObject body;
+    body.insert(QStringLiteral("amount"), money);
+
+    QString transferUid = QUuid::createUuid().toString();
+    transferUid.remove(QLatin1Char('{'));
+    transferUid.remove(QLatin1Char('}'));
+
+    const QString action = addMoney
+            ? QStringLiteral("add-money")
+            : QStringLiteral("withdraw-money");
+
+    const QString path =
+            QStringLiteral("/api/v2/account/%1/savings-goals/%2/%3/%4")
+            .arg(m_accountUid)
+            .arg(trimmedGoalUid)
+            .arg(action)
+            .arg(transferUid);
+
+    setStatus(addMoney
+              ? QStringLiteral("Adding money to savings goal...")
+              : QStringLiteral("Withdrawing money from savings goal..."));
+
+    sendJsonWithToken(path,
+                      QStringLiteral("PUT"),
+                      body,
+                      m_token,
+                      [this, addMoney](const QByteArray &) {
+        setStatus(addMoney
+                  ? QStringLiteral("Money added to savings goal.")
+                  : QStringLiteral("Money withdrawn from savings goal."));
+
+        refreshSpaces();
+        refreshBalance();
+        touchLastUpdated();
+        emit savingsGoalTransferCompleted();
+    }, false);
+}
+
 // Feed Extract Csv - Statements/transactions
 QString StarlingClient::lastFeedExportCsvPath() const
 {

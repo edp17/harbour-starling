@@ -305,6 +305,8 @@ public:
     Q_INVOKABLE void cancelStandingOrder(const QString &paymentOrderUid);
     Q_INVOKABLE void downloadFeedExportCsvRange(const QString &startDate, const QString &endDate);
     Q_INVOKABLE void createSavingsGoal(const QString &name, const QString &targetAmount);
+    Q_INVOKABLE void addMoneyToSavingsGoal(const QString &savingsGoalUid, const QString &amount);
+    Q_INVOKABLE void withdrawMoneyFromSavingsGoal(const QString &savingsGoalUid, const QString &amount);
 
 signals:
     void tokenChanged();
@@ -348,6 +350,7 @@ signals:
     void lastFeedExportCsvPathChanged();
     void spacesChanged();
     void savingsGoalCreated();
+    void savingsGoalTransferCompleted();
 
 private:
     // helpers
@@ -439,6 +442,7 @@ private:
     QString hashPin(const QString &pin, const QString &salt) const;
     bool verifyPinValue(const QString &pin) const;
     bool validateNewPin(const QString &pin, const QString &confirmPin, QString *error) const;
+    void transferSavingsGoalMoney(const QString &savingsGoalUid, const QString &amount, bool addMoney);
 
 private:
     // members

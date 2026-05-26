@@ -24,6 +24,26 @@ Page {
     id: page
 
     property var space: ({})
+    property bool transferRequested: false
+
+    function requirePinThen(action) {
+        pinActionRunner.pendingAction = action
+        starlingClient.requestPinConfirmation()
+    }
+
+    function addMoney() {
+        transferRequested = true
+        requirePinThen(function() {
+            starlingClient.addMoneyToSavingsGoal(page.space.spaceUid, amountField.text.trim())
+        })
+    }
+
+    function withdrawMoney() {
+        transferRequested = true
+        requirePinThen(function() {
+            starlingClient.withdrawMoneyFromSavingsGoal(page.space.spaceUid, amountField.text.trim())
+        })
+    }
 
     function valueOrDash(value) {
         return value && value.length > 0 ? value : "-"
@@ -145,6 +165,66 @@ Page {
                     }
                 }
             }
+
+            SectionHeader {
+                text: qsTr("Actions")
+            }
+
+            Rectangle {
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * x
+                height: actionColumn.height + 2 * Theme.paddingMedium
+
+                radius: Theme.paddingMedium
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.10)
+                border.width: 1
+                border.color: Theme.rgba(Theme.primaryColor, 0.10)
+
+                Column {
+                    id: actionColumn
+                    x: Theme.paddingMedium
+                    y: Theme.paddingMedium
+                    width: parent.width - 2 * Theme.paddingMedium
+                    spacing: Theme.paddingMedium
+
+                    Label {
+                        width: parent.width
+                        text: qsTr("Move money in or out of this savings goal.")
+                        color: Theme.secondaryColor
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+
+                    TextField {
+                        id: amountField
+                        width: parent.width
+                        label: qsTr("Amount")
+                        placeholderText: qsTr("10.00")
+                        inputMethodHints: Qt.ImhFormattedNumbersOnly
+                    }
+
+                    Row {
+                        width: parent.width
+                        spacing: Theme.paddingMedium
+
+                        Button {
+                            width: (parent.width - Theme.paddingMedium) / 2
+                            enabled: amountField.text.trim().length > 0 && !starlingClient.busy
+                            text: qsTr("Add")
+                            onClicked: page.addMoney()
+                        }
+
+                        Button {
+                            width: (parent.width - Theme.paddingMedium) / 2
+                            enabled: amountField.text.trim().length > 0 && !starlingClient.busy
+                            text: qsTr("Withdraw")
+                            onClicked: page.withdrawMoney()
+                        }
+                    }
+                }
+            }
+
+
         }
 
         VerticalScrollDecorator {}
@@ -153,5 +233,29 @@ Page {
     ActivityCatcher {
         z: 997
         enabled: !starlingClient.locked
+    }
+
+    QtObject {
+        id: pinActionRunner
+        property var pendingAction: null
+    }
+
+    Connections {
+        target: starlingClient
+
+        onPinConfirmed: {
+            if (pinActionRunner.pendingAction) {
+                var action = pinActionRunner.pendingAction
+                pinActionRunner.pendingAction = null
+                action()
+            }
+        }
+
+        onSavingsGoalTransferCompleted: {
+            if (page.transferRequested) {
+                page.transferRequested = false
+                pageStack.pop()
+            }
+        }
     }
 }
