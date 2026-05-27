@@ -75,6 +75,7 @@ class StarlingClient : public QObject
     Q_PROPERTY(QVariantList transactionAttachments READ transactionAttachments NOTIFY transactionAttachmentsChanged)
     Q_PROPERTY(QVariantList transactionReceipts READ transactionReceipts NOTIFY transactionReceiptsChanged)
     Q_PROPERTY(QVariantMap transactionMastercardDetails READ transactionMastercardDetails NOTIFY transactionMastercardDetailsChanged)
+    Q_PROPERTY(QString lastAttachmentPath READ lastAttachmentPath NOTIFY lastAttachmentPathChanged)
 
 public:
     explicit StarlingClient(QObject *parent = nullptr);
@@ -107,6 +108,7 @@ public:
     QString privateApiKeyPem() const;
     QString consentMessage() const;
     QString pinSettingsError() const;
+    QString lastAttachmentPath() const;
     QVariantMap paymentDraft() const;
     QVariantMap transactionDetail() const;
     QVariantMap payeeDetail() const;
@@ -299,6 +301,9 @@ public:
     Q_INVOKABLE void refreshTransactionAttachments(const QString &feedItemUid);
     Q_INVOKABLE void refreshTransactionReceipts(const QString &feedItemUid);
     Q_INVOKABLE void refreshTransactionMastercardDetails(const QString &feedItemUid);
+    Q_INVOKABLE void downloadTransactionAttachment(const QString &feedItemUid,
+                                                   const QString &attachmentUid,
+                                                   const QString &name);
 
 signals:
     void tokenChanged();
@@ -354,6 +359,7 @@ signals:
     void transactionAttachmentsChanged();
     void transactionReceiptsChanged();
     void transactionMastercardDetailsChanged();
+    void lastAttachmentPathChanged();
 
 private:
     // helpers
@@ -476,6 +482,7 @@ private:
     QString m_paymentResultMessage;
     QString buildIsoDateHeader() const;
     QString m_lastFeedExportCsvPath;
+    QString m_lastAttachmentPath;
     bool m_busy = false;
     bool m_initializing = false;
     bool m_locked = false;

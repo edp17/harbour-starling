@@ -69,6 +69,101 @@ StarlingClient::StarlingClient(QObject *parent)
 }
 
 // Transactions
+QString StarlingClient::lastAttachmentPath() const
+{
+    return m_lastAttachmentPath;
+}
+
+void StarlingClient::downloadTransactionAttachment(const QString &feedItemUid,
+                                                   const QString &attachmentUid,
+                                                   const QString &name)
+{
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedFeedItemUid = feedItemUid.trimmed();
+    const QString trimmedAttachmentUid = attachmentUid.trimmed();
+
+    if (trimmedFeedItemUid.isEmpty() || trimmedAttachmentUid.isEmpty()) {
+        setStatus(QStringLiteral("Attachment details are missing."));
+        return;
+    }
+
+    QString safeName = name.trimmed();
+    if (safeName.isEmpty())
+        safeName = QStringLiteral("starling-attachment");
+
+    safeName.replace(QStringLiteral("/"), QStringLiteral("_"));
+    safeName.replace(QStringLiteral("\\"), QStringLiteral("_"));
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/category/%2/%3/attachments/%4")
+            .arg(m_accountUid)
+            .arg(m_categoryUid)
+            .arg(trimmedFeedItemUid)
+            .arg(trimmedAttachmentUid);
+
+    QUrl url(QString::fromLatin1(BASE_URL) + path);
+
+    QNetworkRequest req(url);
+    req.setRawHeader("Authorization", QByteArray("Bearer ") + m_token.toUtf8());
+
+    setStatus(QStringLiteral("Downloading attachment..."));
+    beginRequest();
+
+    QNetworkReply *rep = m_nam.get(req);
+
+    connect(rep, &QNetworkReply::finished, this, [this, rep, safeName]() {
+        const QByteArray body = rep->readAll();
+
+        if (rep->error() != QNetworkReply::NoError) {
+            qWarning() << "downloadTransactionAttachment failed url=" << rep->url()
+                       << "status=" << rep->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt()
+                       << "qtError=" << rep->errorString()
+                       << "body=" << QString::fromUtf8(body);
+
+            setStatus(QStringLiteral("Attachment download failed: %1").arg(rep->errorString()));
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        const QString docsRoot = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+        QDir dir(docsRoot + QStringLiteral("/Starling Attachments"));
+
+        if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
+            setStatus(QStringLiteral("Could not create attachment folder."));
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        const QString filePath = dir.filePath(safeName);
+
+        QFile file(filePath);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            setStatus(QStringLiteral("Could not save attachment."));
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        file.write(body);
+        file.close();
+
+        m_lastAttachmentPath = filePath;
+        emit lastAttachmentPathChanged();
+
+        touchLastUpdated();
+        setStatus(QStringLiteral("Attachment saved: %1").arg(filePath));
+
+        rep->deleteLater();
+        endRequest();
+    });
+}
+
 QVariantMap StarlingClient::transactionMastercardDetails() const
 {
     return m_transactionMastercardDetails;

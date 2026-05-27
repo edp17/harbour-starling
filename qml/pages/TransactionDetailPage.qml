@@ -450,7 +450,30 @@ Page {
                                 font.pixelSize: Theme.fontSizeExtraSmall
                                 wrapMode: Text.Wrap
                             }
+
+                            Button {
+                                width: parent.width
+                                enabled: !starlingClient.busy
+                                         && transactionData.feedItemUid
+                                         && transactionData.feedItemUid.length > 0
+                                         && modelData.feedItemAttachmentUid
+                                         && modelData.feedItemAttachmentUid.length > 0
+                                text: qsTr("Download")
+                                onClicked: starlingClient.downloadTransactionAttachment(
+                                               transactionData.feedItemUid,
+                                               modelData.feedItemAttachmentUid,
+                                               modelData.name || qsTr("starling-attachment"))
+                            }
                         }
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: starlingClient.lastAttachmentPath.length > 0
+                        text: qsTr("Last saved:\n%1").arg(starlingClient.lastAttachmentPath)
+                        color: Theme.secondaryColor
+                        wrapMode: Text.WrapAnywhere
+                        font.pixelSize: Theme.fontSizeExtraSmall
                     }
                 }
             }
