@@ -50,6 +50,7 @@ Page {
         "SAVING"
     ]
     property string selectedCategory: transactionData.category || "GENERAL"
+    property int saveButtonWidth: Theme.itemSizeLarge
 
     function canEditNote() {
         return transactionData.feedItemUid && transactionData.feedItemUid.length > 0
@@ -319,17 +320,31 @@ Page {
                         wrapMode: Text.Wrap
                     }
 
-                    TextSwitch {
-                        id: editCategorySwitch
+                    Row {
                         width: parent.width
-                        text: qsTr("Edit category")
-                        checked: page.editingCategory
-                        enabled: page.canEditCategory() && !starlingClient.busy
+                        spacing: Theme.paddingSmall
 
-                        onCheckedChanged: {
-                            page.editingCategory = checked
-                            if (checked)
-                                page.selectedCategory = transactionData.category || "GENERAL"
+                        TextSwitch {
+                            id: editCategorySwitch
+                            width: parent.width - page.saveButtonWidth - Theme.paddingSmall
+                            text: qsTr("Edit category")
+                            checked: page.editingCategory
+                            enabled: page.canEditCategory() && !starlingClient.busy
+                            onCheckedChanged: {
+                                page.editingCategory = checked
+                                if (checked)
+                                    page.selectedCategory = transactionData.category || "GENERAL"
+                            }
+                        }
+
+                        Button {
+                            id: saveCategoryButton
+                            width: page.saveButtonWidth
+                            visible: page.editingCategory
+                            enabled: page.canEditCategory() && !starlingClient.busy
+                            text: qsTr("Save")
+                            onClicked: starlingClient.updateTransactionCategory(transactionData.feedItemUid,
+                                                                                page.selectedCategory)
                         }
                     }
 
@@ -354,15 +369,6 @@ Page {
                             if (currentIndex >= 0 && currentIndex < page.categoryOptions.length)
                                 page.selectedCategory = page.categoryOptions[currentIndex]
                         }
-                    }
-
-                    Button {
-                        width: parent.width
-                        visible: page.editingCategory
-                        enabled: page.canEditCategory() && !starlingClient.busy
-                        text: starlingClient.busy ? qsTr("Saving...") : qsTr("Save category")
-                        onClicked: starlingClient.updateTransactionCategory(transactionData.feedItemUid,
-                                                                            page.selectedCategory)
                     }
 
                     Label {
@@ -408,17 +414,31 @@ Page {
                         wrapMode: Text.Wrap
                     }
 
-                    TextSwitch {
-                        id: editNoteSwitch
+                    Row {
                         width: parent.width
-                        text: qsTr("Edit note")
-                        checked: page.editingNote
-                        enabled: page.canEditNote() && !starlingClient.busy
+                        spacing: Theme.paddingSmall
 
-                        onCheckedChanged: {
-                            page.editingNote = checked
-                            if (checked)
-                                noteField.text = transactionData.userNote || ""
+                        TextSwitch {
+                            id: editNoteSwitch
+                            width: parent.width - page.saveButtonWidth - Theme.paddingSmall
+                            text: qsTr("Edit note")
+                            checked: page.editingNote
+                            enabled: page.canEditNote() && !starlingClient.busy
+                            onCheckedChanged: {
+                                page.editingNote = checked
+                                if (checked)
+                                    noteField.text = transactionData.userNote || ""
+                            }
+                        }
+
+                        Button {
+                            id: saveNoteButton
+                            width: page.saveButtonWidth
+                            visible: page.editingNote
+                            enabled: page.canEditNote() && !starlingClient.busy
+                            text: qsTr("Save")
+                            onClicked: starlingClient.updateTransactionNote(transactionData.feedItemUid,
+                                                                            noteField.text)
                         }
                     }
 
@@ -430,15 +450,6 @@ Page {
                         placeholderText: qsTr("Add a note...")
                         text: transactionData.userNote || ""
                         enabled: page.canEditNote() && !starlingClient.busy
-                    }
-
-                    Button {
-                        width: parent.width
-                        visible: page.editingNote
-                        enabled: page.canEditNote() && !starlingClient.busy
-                        text: starlingClient.busy ? qsTr("Saving...") : qsTr("Save note")
-                        onClicked: starlingClient.updateTransactionNote(transactionData.feedItemUid,
-                                                                        noteField.text)
                     }
 
                     Label {

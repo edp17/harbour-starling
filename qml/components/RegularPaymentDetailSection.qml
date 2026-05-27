@@ -27,9 +27,9 @@ Rectangle {
     width: parent.width - 2 * x
     height: sectionColumn.height + 2 * Theme.paddingMedium
     radius: Theme.paddingMedium
-    color: Theme.rgba(Theme.highlightBackgroundColor, secondary ? 0.06 : 0.08)
+    color: Theme.rgba(Theme.highlightBackgroundColor, secondary ? 0.12 : 0.25)
     border.width: 1
-    border.color: Theme.rgba(Theme.primaryColor, secondary ? 0.08 : 0.10)
+    border.color: Theme.rgba(Theme.primaryColor, secondary ? 0.12 : 0.15)
 
     Column {
         id: sectionColumn

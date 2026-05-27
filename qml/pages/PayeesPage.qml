@@ -99,9 +99,9 @@ Page {
                 width: parent.width - Theme.horizontalPageMargin * 2
                 height: noPayeesAccessColumn.height + Theme.paddingLarge * 2
                 radius: Theme.paddingMedium
-                color: Theme.rgba(Theme.highlightBackgroundColor, 0.18)
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.12)
                 border.width: 1
-                border.color: Theme.rgba(Theme.highlightColor, 0.22)
+                border.color: Theme.rgba(Theme.highlightColor, 0.12)
 
                 Column {
                     id: noPayeesAccessColumn
@@ -145,9 +145,9 @@ Page {
                 width: parent.width - Theme.horizontalPageMargin * 2
                 height: offlinePayeesColumn.height + Theme.paddingLarge * 2
                 radius: Theme.paddingMedium
-                color: Theme.rgba(Theme.highlightBackgroundColor, 0.18)
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.12)
                 border.width: 1
-                border.color: Theme.rgba(Theme.highlightColor, 0.22)
+                border.color: Theme.rgba(Theme.highlightColor, 0.12)
 
                 Column {
                     id: offlinePayeesColumn
@@ -197,9 +197,9 @@ Page {
                 width: parent.width - 2 * x
                 height: payeeColumn.height + 2 * Theme.paddingMedium
                 radius: Theme.paddingMedium
-                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.12)
                 border.width: 1
-                border.color: Theme.rgba(Theme.primaryColor, 0.15)
+                border.color: Theme.rgba(Theme.primaryColor, 0.12)
 
                 Column {
                     id: payeeColumn

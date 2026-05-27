@@ -154,9 +154,9 @@ Page {
                 width: parent.width - 2 * x
                 height: summaryColumn.height + 2 * Theme.paddingMedium
                 radius: Theme.paddingMedium
-                color: Theme.rgba(Theme.highlightBackgroundColor, 0.12)
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
                 border.width: 1
-                border.color: Theme.rgba(Theme.primaryColor, 0.12)
+                border.color: Theme.rgba(Theme.primaryColor, 0.15)
 
                 Column {
                     id: summaryColumn
@@ -273,9 +273,9 @@ Page {
                     height: upcomingColumn.height + 2 * Theme.paddingMedium
 
                     radius: Theme.paddingMedium
-                    color: Theme.rgba(Theme.highlightBackgroundColor, 0.08)
+                    color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
                     border.width: 1
-                    border.color: Theme.rgba(Theme.primaryColor, 0.10)
+                    border.color: Theme.rgba(Theme.primaryColor, 0.15)
 
                     Column {
                         id: upcomingColumn
@@ -334,9 +334,9 @@ Page {
                     height: historyColumn.height + 2 * Theme.paddingMedium
 
                     radius: Theme.paddingMedium
-                    color: Theme.rgba(Theme.highlightBackgroundColor, 0.08)
+                    color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
                     border.width: 1
-                    border.color: Theme.rgba(Theme.primaryColor, 0.10)
+                    border.color: Theme.rgba(Theme.primaryColor, 0.15)
 
                     Column {
                         id: historyColumn
@@ -404,9 +404,9 @@ Page {
                     height: ddPaymentColumn.height + 2 * Theme.paddingMedium
 
                     radius: Theme.paddingMedium
-                    color: Theme.rgba(Theme.highlightBackgroundColor, 0.08)
+                    color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
                     border.width: 1
-                    border.color: Theme.rgba(Theme.primaryColor, 0.10)
+                    border.color: Theme.rgba(Theme.primaryColor, 0.15)
 
                     Column {
                         id: ddPaymentColumn
@@ -461,9 +461,9 @@ Page {
                 visible: page.isLiveStatus(page.payment.status)
 
                 radius: Theme.paddingMedium
-                color: Theme.rgba(Theme.errorColor, 0.08)
+                color: Theme.rgba(Theme.errorColor, 0.25)
                 border.width: 1
-                border.color: Theme.rgba(Theme.errorColor, 0.25)
+                border.color: Theme.rgba(Theme.errorColor, 0.15)
 
                 Column {
                     id: actionColumn

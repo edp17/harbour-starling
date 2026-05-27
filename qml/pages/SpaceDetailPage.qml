@@ -116,9 +116,9 @@ Page {
                 height: summaryColumn.height + 2 * Theme.paddingMedium
 
                 radius: Theme.paddingMedium
-                color: Theme.rgba(Theme.highlightBackgroundColor, 0.12)
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
                 border.width: 1
-                border.color: Theme.rgba(Theme.primaryColor, 0.12)
+                border.color: Theme.rgba(Theme.primaryColor, 0.15)
 
                 Column {
                     id: summaryColumn
@@ -164,9 +164,9 @@ Page {
                 height: detailsColumn.height + 2 * Theme.paddingMedium
 
                 radius: Theme.paddingMedium
-                color: Theme.rgba(Theme.highlightBackgroundColor, 0.08)
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
                 border.width: 1
-                border.color: Theme.rgba(Theme.primaryColor, 0.10)
+                border.color: Theme.rgba(Theme.primaryColor, 0.15)
 
                 Column {
                     id: detailsColumn
@@ -225,9 +225,9 @@ Page {
                 height: actionColumn.height + 2 * Theme.paddingMedium
 
                 radius: Theme.paddingMedium
-                color: Theme.rgba(Theme.highlightBackgroundColor, 0.10)
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
                 border.width: 1
-                border.color: Theme.rgba(Theme.primaryColor, 0.10)
+                border.color: Theme.rgba(Theme.primaryColor, 0.15)
 
                 Column {
                     id: actionColumn
@@ -291,9 +291,9 @@ Page {
                 height: deleteColumn.height + 2 * Theme.paddingMedium
 
                 radius: Theme.paddingMedium
-                color: Theme.rgba(Theme.errorColor, 0.08)
+                color: Theme.rgba(Theme.errorColor, 0.25)
                 border.width: 1
-                border.color: Theme.rgba(Theme.errorColor, 0.25)
+                border.color: Theme.rgba(Theme.errorColor, 0.15)
 
                 Column {
                     id: deleteColumn
