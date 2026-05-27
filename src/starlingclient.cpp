@@ -432,6 +432,65 @@ void StarlingClient::downloadFeedExportCsvRange(const QString &startDate, const 
 }
 
 // Direct Debits/Mandates & Standing Orders
+QVariantList StarlingClient::directDebitPayments() const
+{
+    return m_directDebitPayments;
+}
+
+void StarlingClient::refreshDirectDebitPayments(const QString &mandateUid)
+{
+    const QString trimmedUid = mandateUid.trimmed();
+
+    if (trimmedUid.isEmpty()) {
+        setStatus(QStringLiteral("Direct Debit mandate UID is missing."));
+        return;
+    }
+
+    m_directDebitPayments.clear();
+    emit directDebitPaymentsChanged();
+
+    setStatus(QStringLiteral("Loading Direct Debit payments..."));
+
+    const QString path =
+            QStringLiteral("/api/v2/direct-debit/mandates/%1/payments")
+            .arg(trimmedUid);
+
+    getJson(path, [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QJsonArray items = root.value(QStringLiteral("payments")).toArray();
+        if (items.isEmpty())
+            items = root.value(QStringLiteral("directDebitPayments")).toArray();
+
+        QVariantList rows;
+
+        for (int i = 0; i < items.size(); ++i) {
+            const QJsonObject item = items.at(i).toObject();
+
+            const QJsonObject amount = item.value(QStringLiteral("amount")).toObject();
+            const QString currency = amount.value(QStringLiteral("currency")).toString(QStringLiteral("GBP"));
+            const qint64 minor = amount.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
+
+            QVariantMap row;
+            row.insert(QStringLiteral("date"),
+                       item.value(QStringLiteral("date")).toString(
+                           item.value(QStringLiteral("paymentDate")).toString(
+                               item.value(QStringLiteral("created")).toString())));
+            row.insert(QStringLiteral("amount"), minor > 0 ? formatMinorUnits(minor, currency) : QString());
+            row.insert(QStringLiteral("status"), item.value(QStringLiteral("status")).toString());
+            row.insert(QStringLiteral("reference"), item.value(QStringLiteral("reference")).toString());
+
+            rows.append(row);
+        }
+
+        m_directDebitPayments = rows;
+        emit directDebitPaymentsChanged();
+
+        setStatus(QStringLiteral("Loaded %1 Direct Debit payment(s).").arg(rows.size()));
+    });
+}
+
 QVariantList StarlingClient::standingOrderPaymentHistory() const
 {
     return m_standingOrderPaymentHistory;

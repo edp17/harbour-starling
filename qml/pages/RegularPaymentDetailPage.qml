@@ -131,6 +131,9 @@ Page {
 
         if (page.isStandingOrder && page.payment.paymentOrderUid && page.payment.paymentOrderUid.length > 0)
             starlingClient.refreshStandingOrderPaymentHistory(page.payment.paymentOrderUid)
+
+        if (page.isDirectDebit && page.payment.mandateUid && page.payment.mandateUid.length > 0)
+            starlingClient.refreshDirectDebitPayments(page.payment.mandateUid)
     }
 
     SilicaFlickable {
@@ -332,6 +335,76 @@ Page {
 
                     Column {
                         id: historyColumn
+                        x: Theme.paddingMedium
+                        y: Theme.paddingMedium
+                        width: parent.width - 2 * Theme.paddingMedium
+                        spacing: Theme.paddingSmall
+
+                        Label {
+                            width: parent.width
+                            text: modelData.date || "-"
+                            color: Theme.primaryColor
+                            font.bold: true
+                        }
+
+                        Label {
+                            width: parent.width
+                            visible: modelData.amount && modelData.amount.length > 0
+                            text: modelData.amount
+                            color: Theme.highlightColor
+                        }
+
+                        Label {
+                            width: parent.width
+                            visible: modelData.reference && modelData.reference.length > 0
+                            text: qsTr("Reference: %1").arg(modelData.reference)
+                            color: Theme.secondaryColor
+                            font.pixelSize: Theme.fontSizeSmall
+                            wrapMode: Text.Wrap
+                        }
+
+                        Label {
+                            width: parent.width
+                            visible: modelData.status && modelData.status.length > 0
+                            text: qsTr("Status: %1").arg(modelData.status)
+                            color: Theme.secondaryColor
+                            font.pixelSize: Theme.fontSizeSmall
+                        }
+                    }
+                }
+            }
+
+            SectionHeader {
+                text: qsTr("Payment history")
+                visible: page.isDirectDebit
+            }
+
+            Label {
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * x
+                visible: page.isDirectDebit && starlingClient.directDebitPayments.length === 0
+                text: starlingClient.busy ? qsTr("Loading Direct Debit payments...")
+                                          : qsTr("No Direct Debit payments found.")
+                color: Theme.secondaryColor
+                wrapMode: Text.Wrap
+                font.pixelSize: Theme.fontSizeSmall
+            }
+
+            Repeater {
+                model: page.isDirectDebit ? starlingClient.directDebitPayments : []
+
+                Rectangle {
+                    x: Theme.horizontalPageMargin
+                    width: parent.width - 2 * x
+                    height: ddPaymentColumn.height + 2 * Theme.paddingMedium
+
+                    radius: Theme.paddingMedium
+                    color: Theme.rgba(Theme.highlightBackgroundColor, 0.08)
+                    border.width: 1
+                    border.color: Theme.rgba(Theme.primaryColor, 0.10)
+
+                    Column {
+                        id: ddPaymentColumn
                         x: Theme.paddingMedium
                         y: Theme.paddingMedium
                         width: parent.width - 2 * Theme.paddingMedium

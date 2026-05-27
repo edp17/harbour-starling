@@ -70,6 +70,7 @@ class StarlingClient : public QObject
     Q_PROPERTY(bool regularPaymentsLoaded READ regularPaymentsLoaded NOTIFY regularPaymentsLoadedChanged)
     Q_PROPERTY(QVariantList standingOrderUpcomingPayments READ standingOrderUpcomingPayments NOTIFY standingOrderUpcomingPaymentsChanged)
     Q_PROPERTY(QVariantList standingOrderPaymentHistory READ standingOrderPaymentHistory NOTIFY standingOrderPaymentHistoryChanged)
+    Q_PROPERTY(QVariantList directDebitPayments READ directDebitPayments NOTIFY directDebitPaymentsChanged)
 
 public:
     explicit StarlingClient(QObject *parent = nullptr);
@@ -111,6 +112,7 @@ public:
     QVariantList spaces() const;
     QVariantList payees() const;
     QVariantList cards() const;
+    QVariantList directDebitPayments() const;
     QVariantList standingOrderPaymentHistory() const;
     QVariantMap payeeDetail() const;
     QVariantList standingOrderUpcomingPayments() const;
@@ -282,6 +284,7 @@ public:
     Q_INVOKABLE void refreshSpaces();
     Q_INVOKABLE void refreshStandingOrderUpcomingPayments(const QString &paymentOrderUid);
     Q_INVOKABLE void refreshStandingOrderPaymentHistory(const QString &paymentOrderUid);
+    Q_INVOKABLE void refreshDirectDebitPayments(const QString &mandateUid);
 
 signals:
     void tokenChanged();
@@ -330,6 +333,7 @@ signals:
     void regularPaymentsLoadedChanged();
     void standingOrderUpcomingPaymentsChanged();
     void standingOrderPaymentHistoryChanged();
+    void directDebitPaymentsChanged();
 
 private:
     // helpers
@@ -476,6 +480,7 @@ private:
     QVariantList m_spaces;
     QVariantList m_standingOrderUpcomingPayments;
     QVariantList m_standingOrderPaymentHistory;
+    QVariantList m_directDebitPayments;
     QVariantMap m_payeeDetail;
     QVariantMap m_paymentDraft;
     TokenStore m_tokenStore;
