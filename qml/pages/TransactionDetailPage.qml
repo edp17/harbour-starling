@@ -67,6 +67,9 @@ Page {
     Component.onCompleted: {
         if (transactionData.feedItemUid && transactionData.feedItemUid.length > 0)
             starlingClient.refreshTransactionDetail(transactionData.feedItemUid)
+
+        if (transactionData.feedItemUid && transactionData.feedItemUid.length > 0)
+            starlingClient.refreshTransactionAttachments(transactionData.feedItemUid)
     }
 
     SilicaFlickable {
@@ -361,6 +364,87 @@ Page {
                         color: Theme.secondaryColor
                         wrapMode: Text.Wrap
                         font.pixelSize: Theme.fontSizeSmall
+                    }
+                }
+            }
+
+            Rectangle {
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * x
+                height: attachmentsColumn.height + 2 * Theme.paddingMedium
+
+                radius: Theme.paddingMedium
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
+                border.width: 1
+                border.color: Theme.rgba(Theme.primaryColor, 0.15)
+
+                Column {
+                    id: attachmentsColumn
+                    x: Theme.paddingMedium
+                    y: Theme.paddingMedium
+                    width: parent.width - 2 * Theme.paddingMedium
+                    spacing: Theme.paddingSmall
+
+                    Label {
+                        width: parent.width
+                        text: qsTr("Attachments")
+                        color: Theme.highlightColor
+                        font.pixelSize: Theme.fontSizeMedium
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: starlingClient.busy && starlingClient.transactionAttachments.length === 0
+                        text: qsTr("Loading attachments...")
+                        color: Theme.secondaryColor
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: !starlingClient.busy && starlingClient.transactionAttachments.length === 0
+                        text: qsTr("No attachments found.")
+                        color: Theme.secondaryColor
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+
+                    Repeater {
+                        model: starlingClient.transactionAttachments
+
+                        Column {
+                            width: parent.width
+                            spacing: Theme.paddingSmall
+
+                            Label {
+                                width: parent.width
+                                text: modelData.name && modelData.name.length > 0
+                                      ? modelData.name
+                                      : qsTr("Attachment")
+                                color: Theme.primaryColor
+                                font.bold: true
+                                wrapMode: Text.Wrap
+                            }
+
+                            Label {
+                                width: parent.width
+                                visible: modelData.contentType && modelData.contentType.length > 0
+                                text: modelData.contentType
+                                color: Theme.secondaryColor
+                                font.pixelSize: Theme.fontSizeSmall
+                                wrapMode: Text.Wrap
+                            }
+
+                            Label {
+                                width: parent.width
+                                visible: modelData.createdAt && modelData.createdAt.length > 0
+                                text: modelData.createdAt
+                                color: Theme.secondaryColor
+                                font.pixelSize: Theme.fontSizeExtraSmall
+                                wrapMode: Text.Wrap
+                            }
+                        }
                     }
                 }
             }

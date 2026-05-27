@@ -69,6 +69,72 @@ StarlingClient::StarlingClient(QObject *parent)
 }
 
 // Transactions
+QVariantList StarlingClient::transactionAttachments() const
+{
+    return m_transactionAttachments;
+}
+
+void StarlingClient::refreshTransactionAttachments(const QString &feedItemUid)
+{
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedUid = feedItemUid.trimmed();
+
+    if (trimmedUid.isEmpty()) {
+        setStatus(QStringLiteral("Transaction UID is missing."));
+        return;
+    }
+
+    m_transactionAttachments.clear();
+    emit transactionAttachmentsChanged();
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/category/%2/%3/attachments")
+            .arg(m_accountUid)
+            .arg(m_categoryUid)
+            .arg(trimmedUid);
+
+    setStatus(QStringLiteral("Loading transaction attachments..."));
+
+    getJson(path, [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QJsonArray items = root.value(QStringLiteral("attachments")).toArray();
+        if (items.isEmpty())
+            items = root.value(QStringLiteral("feedItemAttachments")).toArray();
+
+        QVariantList rows;
+
+        for (int i = 0; i < items.size(); ++i) {
+            const QJsonObject item = items.at(i).toObject();
+
+            QVariantMap row;
+            row.insert(QStringLiteral("feedItemAttachmentUid"),
+                       item.value(QStringLiteral("feedItemAttachmentUid")).toString(
+                           item.value(QStringLiteral("uid")).toString()));
+            row.insert(QStringLiteral("name"),
+                       item.value(QStringLiteral("name")).toString(
+                           item.value(QStringLiteral("filename")).toString()));
+            row.insert(QStringLiteral("contentType"),
+                       item.value(QStringLiteral("contentType")).toString(
+                           item.value(QStringLiteral("mimeType")).toString()));
+            row.insert(QStringLiteral("createdAt"),
+                       formatIsoDateTime(item.value(QStringLiteral("createdAt")).toString()));
+
+            rows.append(row);
+        }
+
+        m_transactionAttachments = rows;
+        emit transactionAttachmentsChanged();
+
+        setStatus(QStringLiteral("Loaded %1 attachment(s).").arg(rows.size()));
+    });
+}
+
 QVariantMap StarlingClient::transactionDetail() const
 {
     return m_transactionDetail;

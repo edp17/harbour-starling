@@ -72,6 +72,7 @@ class StarlingClient : public QObject
     Q_PROPERTY(QVariantList standingOrderPaymentHistory READ standingOrderPaymentHistory NOTIFY standingOrderPaymentHistoryChanged)
     Q_PROPERTY(QVariantList directDebitPayments READ directDebitPayments NOTIFY directDebitPaymentsChanged)
     Q_PROPERTY(QVariantMap transactionDetail READ transactionDetail NOTIFY transactionDetailChanged)
+    Q_PROPERTY(QVariantList transactionAttachments READ transactionAttachments NOTIFY transactionAttachmentsChanged)
 
 public:
     explicit StarlingClient(QObject *parent = nullptr);
@@ -118,6 +119,7 @@ public:
     QVariantList directDebitPayments() const;
     QVariantList standingOrderPaymentHistory() const;
     QVariantList standingOrderUpcomingPayments() const;
+    QVariantList transactionAttachments() const;
     bool busy() const;
     bool pinEnabled() const;
     bool pinPromptVisible() const;
@@ -290,6 +292,7 @@ public:
     Q_INVOKABLE void refreshDirectDebitPayments(const QString &mandateUid);
     Q_INVOKABLE void updateTransactionCategory(const QString &feedItemUid, const QString &category);
     Q_INVOKABLE void refreshTransactionDetail(const QString &feedItemUid);
+    Q_INVOKABLE void refreshTransactionAttachments(const QString &feedItemUid);
 
 signals:
     void tokenChanged();
@@ -342,6 +345,7 @@ signals:
     void transactionNoteUpdated(const QString &feedItemUid, const QString &note);
     void transactionCategoryUpdated(const QString &feedItemUid, const QString &category);
     void transactionDetailChanged();
+    void transactionAttachmentsChanged();
 
 private:
     // helpers
@@ -489,6 +493,7 @@ private:
     QVariantList m_standingOrderUpcomingPayments;
     QVariantList m_standingOrderPaymentHistory;
     QVariantList m_directDebitPayments;
+    QVariantList m_transactionAttachments;
     QVariantMap m_payeeDetail;
     QVariantMap m_paymentDraft;
     QVariantMap m_transactionDetail;
