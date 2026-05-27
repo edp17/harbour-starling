@@ -69,6 +69,7 @@ class StarlingClient : public QObject
     Q_PROPERTY(qint64 availableBalanceMinorUnits READ availableBalanceMinorUnits NOTIFY balanceChanged)
     Q_PROPERTY(bool regularPaymentsLoaded READ regularPaymentsLoaded NOTIFY regularPaymentsLoadedChanged)
     Q_PROPERTY(QVariantList standingOrderUpcomingPayments READ standingOrderUpcomingPayments NOTIFY standingOrderUpcomingPaymentsChanged)
+    Q_PROPERTY(QVariantList standingOrderPaymentHistory READ standingOrderPaymentHistory NOTIFY standingOrderPaymentHistoryChanged)
 
 public:
     explicit StarlingClient(QObject *parent = nullptr);
@@ -110,6 +111,7 @@ public:
     QVariantList spaces() const;
     QVariantList payees() const;
     QVariantList cards() const;
+    QVariantList standingOrderPaymentHistory() const;
     QVariantMap payeeDetail() const;
     QVariantList standingOrderUpcomingPayments() const;
     bool busy() const;
@@ -279,6 +281,7 @@ public:
     Q_INVOKABLE void deleteSavingsGoal(const QString &savingsGoalUid);
     Q_INVOKABLE void refreshSpaces();
     Q_INVOKABLE void refreshStandingOrderUpcomingPayments(const QString &paymentOrderUid);
+    Q_INVOKABLE void refreshStandingOrderPaymentHistory(const QString &paymentOrderUid);
 
 signals:
     void tokenChanged();
@@ -326,6 +329,7 @@ signals:
     void savingsGoalDeleted();
     void regularPaymentsLoadedChanged();
     void standingOrderUpcomingPaymentsChanged();
+    void standingOrderPaymentHistoryChanged();
 
 private:
     // helpers
@@ -387,7 +391,7 @@ private:
     QString formatSortCode(const QString &sortCode) const;
     QString m_pendingAction;
     QString hashPin(const QString &pin, const QString &salt) const;
-    
+
     QVariantList m_payees;
     QVariantList m_cards;
     QTimer m_relockTimer;
@@ -471,6 +475,7 @@ private:
     QVariantList m_standingOrders;
     QVariantList m_spaces;
     QVariantList m_standingOrderUpcomingPayments;
+    QVariantList m_standingOrderPaymentHistory;
     QVariantMap m_payeeDetail;
     QVariantMap m_paymentDraft;
     TokenStore m_tokenStore;

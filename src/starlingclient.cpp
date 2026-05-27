@@ -432,6 +432,11 @@ void StarlingClient::downloadFeedExportCsvRange(const QString &startDate, const 
 }
 
 // Direct Debits/Mandates & Standing Orders
+QVariantList StarlingClient::standingOrderPaymentHistory() const
+{
+    return m_standingOrderPaymentHistory;
+}
+
 QVariantList StarlingClient::standingOrderUpcomingPayments() const
 {
     return m_standingOrderUpcomingPayments;
@@ -450,6 +455,61 @@ QVariantList StarlingClient::directDebitMandates() const
 QVariantList StarlingClient::standingOrders() const
 {
     return m_standingOrders;
+}
+
+void StarlingClient::refreshStandingOrderPaymentHistory(const QString &paymentOrderUid)
+{
+    const QString trimmedUid = paymentOrderUid.trimmed();
+
+    if (trimmedUid.isEmpty()) {
+        setStatus(QStringLiteral("Standing Order UID is missing."));
+        return;
+    }
+
+    m_standingOrderPaymentHistory.clear();
+    emit standingOrderPaymentHistoryChanged();
+
+    setStatus(QStringLiteral("Loading Standing Order payment history..."));
+
+    const QString path =
+            QStringLiteral("/api/v2/payments/local/payment-order/%1/payments")
+            .arg(trimmedUid);
+
+    getJson(path, [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QJsonArray items = root.value(QStringLiteral("payments")).toArray();
+        if (items.isEmpty())
+            items = root.value(QStringLiteral("paymentOrders")).toArray();
+
+        QVariantList rows;
+
+        for (int i = 0; i < items.size(); ++i) {
+            const QJsonObject item = items.at(i).toObject();
+
+            const QJsonObject amount = item.value(QStringLiteral("amount")).toObject();
+            const QString currency = amount.value(QStringLiteral("currency")).toString(QStringLiteral("GBP"));
+            const qint64 minor = amount.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
+
+            QVariantMap row;
+            row.insert(QStringLiteral("paymentUid"), item.value(QStringLiteral("paymentUid")).toString());
+            row.insert(QStringLiteral("date"),
+                       item.value(QStringLiteral("createdAt")).toString(
+                           item.value(QStringLiteral("paymentDate")).toString(
+                               item.value(QStringLiteral("date")).toString())));
+            row.insert(QStringLiteral("amount"), minor > 0 ? formatMinorUnits(minor, currency) : QString());
+            row.insert(QStringLiteral("status"), item.value(QStringLiteral("status")).toString());
+            row.insert(QStringLiteral("reference"), item.value(QStringLiteral("reference")).toString());
+
+            rows.append(row);
+        }
+
+        m_standingOrderPaymentHistory = rows;
+        emit standingOrderPaymentHistoryChanged();
+
+        setStatus(QStringLiteral("Loaded %1 payment history item(s).").arg(rows.size()));
+    });
 }
 
 void StarlingClient::refreshRegularPayments()
