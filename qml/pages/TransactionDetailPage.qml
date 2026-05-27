@@ -35,7 +35,7 @@ Page {
     property string categoryText: transactionData && transactionData.category ? transactionData.category : "-"
     property string directionText: transactionData && transactionData.direction ? transactionData.direction : "-"
     property string currencyText: transactionData && transactionData.currency ? transactionData.currency : "-"
-    property string pageError: ""
+    property bool editingNote: false
 
     function canEditNote() {
         return transactionData.feedItemUid && transactionData.feedItemUid.length > 0
@@ -294,9 +294,32 @@ Page {
                         font.bold: true
                     }
 
+                    Label {
+                        width: parent.width
+                        visible: !page.editingNote && transactionData.userNote && transactionData.userNote.length > 0
+                        text: transactionData.userNote
+                        color: Theme.primaryColor
+                        wrapMode: Text.Wrap
+                    }
+
+                    TextSwitch {
+                        id: editNoteSwitch
+                        width: parent.width
+                        text: qsTr("Edit note")
+                        checked: page.editingNote
+                        enabled: page.canEditNote() && !starlingClient.busy
+
+                        onCheckedChanged: {
+                            page.editingNote = checked
+                            if (checked)
+                                noteField.text = transactionData.userNote || ""
+                        }
+                    }
+
                     TextArea {
                         id: noteField
                         width: parent.width
+                        visible: page.editingNote
                         label: qsTr("Transaction note")
                         placeholderText: qsTr("Add a note...")
                         text: transactionData.userNote || ""
@@ -305,6 +328,7 @@ Page {
 
                     Button {
                         width: parent.width
+                        visible: page.editingNote
                         enabled: page.canEditNote() && !starlingClient.busy
                         text: starlingClient.busy ? qsTr("Saving...") : qsTr("Save note")
                         onClicked: starlingClient.updateTransactionNote(transactionData.feedItemUid,
@@ -338,6 +362,8 @@ Page {
                 updated.userNote = note
                 transactionData = updated
                 noteField.text = note
+                page.editingNote = false
+                editNoteSwitch.checked = false
             }
         }
     }

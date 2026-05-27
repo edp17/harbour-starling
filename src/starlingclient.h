@@ -71,7 +71,6 @@ class StarlingClient : public QObject
     Q_PROPERTY(QVariantList standingOrderUpcomingPayments READ standingOrderUpcomingPayments NOTIFY standingOrderUpcomingPaymentsChanged)
     Q_PROPERTY(QVariantList standingOrderPaymentHistory READ standingOrderPaymentHistory NOTIFY standingOrderPaymentHistoryChanged)
     Q_PROPERTY(QVariantList directDebitPayments READ directDebitPayments NOTIFY directDebitPaymentsChanged)
-    Q_INVOKABLE void updateTransactionNote(const QString &feedItemUid, const QString &note);
 
 public:
     explicit StarlingClient(QObject *parent = nullptr);
@@ -145,6 +144,7 @@ public:
     Q_INVOKABLE void refreshBalance();
     Q_INVOKABLE void refreshTransactions(int daysBack = 14);
     Q_INVOKABLE void refreshTransactionsRange(const QString &fromDate, const QString &toDate);
+    Q_INVOKABLE void updateTransactionNote(const QString &feedItemUid, const QString &note);
     Q_INVOKABLE void saveToken();
     Q_INVOKABLE void loadToken();
     Q_INVOKABLE void clearToken();
