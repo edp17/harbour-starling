@@ -22,6 +22,7 @@ import Sailfish.Silica 1.0
 Rectangle {
     property var fields: []
     property bool secondary: false
+    property string title: ""
 
     x: Theme.horizontalPageMargin
     width: parent.width - 2 * x
@@ -37,6 +38,14 @@ Rectangle {
         y: Theme.paddingMedium
         width: parent.width - 2 * Theme.paddingMedium
         spacing: Theme.paddingSmall
+
+        Label {
+            width: parent.width
+            visible: title.length > 0
+            text: title
+            color: Theme.highlightColor
+            font.pixelSize: Theme.fontSizeSmall
+        }
 
         Repeater {
             model: fields

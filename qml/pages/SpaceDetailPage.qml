@@ -154,10 +154,6 @@ Page {
                 }
             }
 
-            SectionHeader {
-                text: qsTr("Details")
-            }
-
             Rectangle {
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * x
@@ -174,6 +170,13 @@ Page {
                     y: Theme.paddingMedium
                     width: parent.width - 2 * Theme.paddingMedium
                     spacing: Theme.paddingSmall
+
+                    Label {
+                        width: parent.width
+                        text: qsTr("Details")
+                        color: Theme.highlightColor
+                        font.pixelSize: Theme.fontSizeMedium
+                    }
 
                     Label {
                         width: parent.width
@@ -214,10 +217,6 @@ Page {
                 }
             }
 
-            SectionHeader {
-                text: qsTr("Actions")
-            }
-
             Rectangle {
                 // Actions card
                 x: Theme.horizontalPageMargin
@@ -235,6 +234,13 @@ Page {
                     y: Theme.paddingMedium
                     width: parent.width - 2 * Theme.paddingMedium
                     spacing: Theme.paddingMedium
+
+                    Label {
+                        width: parent.width
+                        text: qsTr("Actions")
+                        color: Theme.highlightColor
+                        font.pixelSize: Theme.fontSizeMedium
+                    }
 
                     Label {
                         width: parent.width
@@ -301,6 +307,13 @@ Page {
                     y: Theme.paddingMedium
                     width: parent.width - 2 * Theme.paddingMedium
                     spacing: Theme.paddingMedium
+
+                    Label {
+                        width: parent.width
+                        text: qsTr("Delete")
+                        color: Theme.highlightColor
+                        font.pixelSize: Theme.fontSizeMedium
+                    }
 
                     Label {
                         width: parent.width

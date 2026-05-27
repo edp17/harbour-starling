@@ -198,11 +198,8 @@ Page {
                 }
             }
 
-            SectionHeader {
-                text: page.isDirectDebit ? qsTr("Mandate") : qsTr("Paying to")
-            }
-
             RegularPaymentDetailSection {
+                title: page.isDirectDebit ? qsTr("Mandate") : qsTr("Paying to")
                 fields: page.isDirectDebit ? [
                     page.field(qsTr("Source"), page.payment.source),
                     page.field(qsTr("Originator"), page.payment.originatorName),
@@ -216,9 +213,8 @@ Page {
                 ]
             }
 
-            SectionHeader { text: qsTr("Schedule") }
-
             RegularPaymentDetailSection {
+                title: qsTr("Schedule")
                 fields: page.isDirectDebit ? [
                     page.field(qsTr("Next date"), page.payment.nextDate),
                     page.field(qsTr("Last date"), page.payment.lastDate),
@@ -245,213 +241,95 @@ Page {
                 ])
             }
 
-            SectionHeader {
-                text: qsTr("Upcoming payments")
+            RegularPaymentDetailSection {
                 visible: page.isStandingOrder
-            }
-
-            Label {
-                x: Theme.horizontalPageMargin
-                width: parent.width - 2 * x
-                visible: page.isStandingOrder && starlingClient.standingOrderUpcomingPayments.length === 0
-                text: starlingClient.busy
-                      ? qsTr("Loading upcoming payments...")
-                      : (page.payment.nextDate && page.payment.nextDate.length > 0
-                         ? qsTr("Next scheduled payment: %1").arg(page.payment.nextDate)
-                         : qsTr("No upcoming payments found."))
-                color: Theme.secondaryColor
-                wrapMode: Text.Wrap
-                font.pixelSize: Theme.fontSizeSmall
+                title: qsTr("Upcoming payments")
+                fields: starlingClient.standingOrderUpcomingPayments.length === 0
+                        ? [
+                            starlingClient.busy
+                                ? qsTr("Loading upcoming payments...")
+                                : (page.payment.nextDate && page.payment.nextDate.length > 0
+                                   ? qsTr("Next scheduled payment: %1").arg(page.payment.nextDate)
+                                   : qsTr("No upcoming payments found."))
+                          ]
+                        : []
             }
 
             Repeater {
                 model: page.isStandingOrder ? starlingClient.standingOrderUpcomingPayments : []
 
-                Rectangle {
-                    x: Theme.horizontalPageMargin
-                    width: parent.width - 2 * x
-                    height: upcomingColumn.height + 2 * Theme.paddingMedium
-
-                    radius: Theme.paddingMedium
-                    color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
-                    border.width: 1
-                    border.color: Theme.rgba(Theme.primaryColor, 0.15)
-
-                    Column {
-                        id: upcomingColumn
-                        x: Theme.paddingMedium
-                        y: Theme.paddingMedium
-                        width: parent.width - 2 * Theme.paddingMedium
-                        spacing: Theme.paddingSmall
-
-                        Label {
-                            width: parent.width
-                            text: modelData.date || "-"
-                            color: Theme.primaryColor
-                            font.bold: true
-                        }
-
-                        Label {
-                            width: parent.width
-                            visible: modelData.amount && modelData.amount.length > 0
-                            text: modelData.amount
-                            color: Theme.highlightColor
-                        }
-
-                        Label {
-                            width: parent.width
-                            visible: modelData.status && modelData.status.length > 0
-                            text: qsTr("Status: %1").arg(modelData.status)
-                            color: Theme.secondaryColor
-                            font.pixelSize: Theme.fontSizeSmall
-                        }
-                    }
+                RegularPaymentDetailSection {
+                    fields: [
+                        modelData.date || "-",
+                        modelData.amount || ""
+                    ].concat(
+                        modelData.status && modelData.status.length > 0
+                            ? [qsTr("Status: %1").arg(modelData.status)]
+                            : []
+                    )
                 }
             }
 
-            SectionHeader {
-                text: qsTr("Payment history")
+            RegularPaymentDetailSection {
                 visible: page.isStandingOrder
-            }
-
-            Label {
-                x: Theme.horizontalPageMargin
-                width: parent.width - 2 * x
-                visible: page.isStandingOrder && starlingClient.standingOrderPaymentHistory.length === 0
-                text: starlingClient.busy ? qsTr("Loading payment history...")
-                                          : qsTr("No payment history found.")
-                color: Theme.secondaryColor
-                wrapMode: Text.Wrap
-                font.pixelSize: Theme.fontSizeSmall
+                title: qsTr("Payment history")
+                fields: starlingClient.standingOrderPaymentHistory.length === 0
+                        ? [
+                            starlingClient.busy
+                                ? qsTr("Loading payment history...")
+                                : qsTr("No payment history found.")
+                          ]
+                        : []
             }
 
             Repeater {
                 model: page.isStandingOrder ? starlingClient.standingOrderPaymentHistory : []
 
-                Rectangle {
-                    x: Theme.horizontalPageMargin
-                    width: parent.width - 2 * x
-                    height: historyColumn.height + 2 * Theme.paddingMedium
-
-                    radius: Theme.paddingMedium
-                    color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
-                    border.width: 1
-                    border.color: Theme.rgba(Theme.primaryColor, 0.15)
-
-                    Column {
-                        id: historyColumn
-                        x: Theme.paddingMedium
-                        y: Theme.paddingMedium
-                        width: parent.width - 2 * Theme.paddingMedium
-                        spacing: Theme.paddingSmall
-
-                        Label {
-                            width: parent.width
-                            text: modelData.date || "-"
-                            color: Theme.primaryColor
-                            font.bold: true
-                        }
-
-                        Label {
-                            width: parent.width
-                            visible: modelData.amount && modelData.amount.length > 0
-                            text: modelData.amount
-                            color: Theme.highlightColor
-                        }
-
-                        Label {
-                            width: parent.width
-                            visible: modelData.reference && modelData.reference.length > 0
-                            text: qsTr("Reference: %1").arg(modelData.reference)
-                            color: Theme.secondaryColor
-                            font.pixelSize: Theme.fontSizeSmall
-                            wrapMode: Text.Wrap
-                        }
-
-                        Label {
-                            width: parent.width
-                            visible: modelData.status && modelData.status.length > 0
-                            text: qsTr("Status: %1").arg(modelData.status)
-                            color: Theme.secondaryColor
-                            font.pixelSize: Theme.fontSizeSmall
-                        }
-                    }
+                RegularPaymentDetailSection {
+                    fields: [
+                        modelData.date || "-",
+                        modelData.amount || ""
+                    ].concat(
+                        modelData.reference && modelData.reference.length > 0
+                            ? [qsTr("Reference: %1").arg(modelData.reference)]
+                            : []
+                    ).concat(
+                        modelData.status && modelData.status.length > 0
+                            ? [qsTr("Status: %1").arg(modelData.status)]
+                            : []
+                    )
                 }
             }
 
-            SectionHeader {
-                text: qsTr("Payment history")
+            RegularPaymentDetailSection {
                 visible: page.isDirectDebit
-            }
-
-            Label {
-                x: Theme.horizontalPageMargin
-                width: parent.width - 2 * x
-                visible: page.isDirectDebit && starlingClient.directDebitPayments.length === 0
-                text: starlingClient.busy ? qsTr("Loading Direct Debit payments...")
-                                          : qsTr("No Direct Debit payments found.")
-                color: Theme.secondaryColor
-                wrapMode: Text.Wrap
-                font.pixelSize: Theme.fontSizeSmall
+                title: qsTr("Payment history")
+                fields: starlingClient.directDebitPayments.length === 0
+                        ? [
+                            starlingClient.busy
+                                ? qsTr("Loading Direct Debit payments...")
+                                : qsTr("No Direct Debit payments found.")
+                          ]
+                        : []
             }
 
             Repeater {
                 model: page.isDirectDebit ? starlingClient.directDebitPayments : []
 
-                Rectangle {
-                    x: Theme.horizontalPageMargin
-                    width: parent.width - 2 * x
-                    height: ddPaymentColumn.height + 2 * Theme.paddingMedium
-
-                    radius: Theme.paddingMedium
-                    color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
-                    border.width: 1
-                    border.color: Theme.rgba(Theme.primaryColor, 0.15)
-
-                    Column {
-                        id: ddPaymentColumn
-                        x: Theme.paddingMedium
-                        y: Theme.paddingMedium
-                        width: parent.width - 2 * Theme.paddingMedium
-                        spacing: Theme.paddingSmall
-
-                        Label {
-                            width: parent.width
-                            text: modelData.date || "-"
-                            color: Theme.primaryColor
-                            font.bold: true
-                        }
-
-                        Label {
-                            width: parent.width
-                            visible: modelData.amount && modelData.amount.length > 0
-                            text: modelData.amount
-                            color: Theme.highlightColor
-                        }
-
-                        Label {
-                            width: parent.width
-                            visible: modelData.reference && modelData.reference.length > 0
-                            text: qsTr("Reference: %1").arg(modelData.reference)
-                            color: Theme.secondaryColor
-                            font.pixelSize: Theme.fontSizeSmall
-                            wrapMode: Text.Wrap
-                        }
-
-                        Label {
-                            width: parent.width
-                            visible: modelData.status && modelData.status.length > 0
-                            text: qsTr("Status: %1").arg(modelData.status)
-                            color: Theme.secondaryColor
-                            font.pixelSize: Theme.fontSizeSmall
-                        }
-                    }
+                RegularPaymentDetailSection {
+                    fields: [
+                        modelData.date || "-",
+                        modelData.amount || ""
+                    ].concat(
+                        modelData.reference && modelData.reference.length > 0
+                            ? [qsTr("Reference: %1").arg(modelData.reference)]
+                            : []
+                    ).concat(
+                        modelData.status && modelData.status.length > 0
+                            ? [qsTr("Status: %1").arg(modelData.status)]
+                            : []
+                    )
                 }
-            }
-
-            SectionHeader {
-                text: qsTr("Actions")
-                visible: page.isLiveStatus(page.payment.status)
             }
 
             Rectangle {
@@ -471,6 +349,13 @@ Page {
                     y: Theme.paddingMedium
                     width: parent.width - 2 * Theme.paddingMedium
                     spacing: Theme.paddingMedium
+
+                    Label {
+                        width: parent.width
+                        text: qsTr("Actions")
+                        color: Theme.highlightColor
+                        font.pixelSize: Theme.fontSizeMedium
+                    }
 
                     Label {
                         width: parent.width
