@@ -199,7 +199,7 @@ Page {
             }
 
             SectionHeader {
-                text: page.isDirectDebit ? qsTr("Mandate") : qsTr("Destination")
+                text: page.isDirectDebit ? qsTr("Mandate") : qsTr("Paying to")
             }
 
             RegularPaymentDetailSection {
@@ -212,9 +212,7 @@ Page {
                     page.fieldOrLoading(qsTr("Name"), page.standingOrderPayeeName()),
                     page.fieldOrLoading(qsTr("Account number"), page.standingOrderAccount() ? page.standingOrderAccount().accountIdentifier : ""),
                     page.fieldOrLoading(qsTr("Sort code"), page.standingOrderAccount() ? page.standingOrderAccount().bankIdentifier : ""),
-                    page.fieldOrLoading(qsTr("Account description"), page.standingOrderAccount() ? page.standingOrderAccount().description : ""),
-                    page.field(qsTr("Reference"), page.payment.reference),
-                    page.field(qsTr("Spending category"), page.payment.spendingCategory)
+                    page.fieldOrLoading(qsTr("Account description"), page.standingOrderAccount() ? page.standingOrderAccount().description : "")
                 ]
             }
 
@@ -230,14 +228,21 @@ Page {
                     page.field(qsTr("Cancelled"), page.payment.cancelled)
                 ] : [
                     page.field(qsTr("Frequency"), page.payment.frequency),
-                    page.field(qsTr("Interval"), page.payment.interval),
                     page.field(qsTr("Start date"), page.payment.startDate),
-                    page.field(qsTr("Next payment"), page.payment.nextDate),
-                    page.field(qsTr("Count"), page.payment.count),
-                    page.field(qsTr("Until date"), page.payment.untilDate),
+                    page.field(qsTr("Next payment"), page.payment.nextDate)
+                ].concat(
+                    page.payment.count && page.payment.count.length > 0
+                        ? [page.field(qsTr("Ending"), qsTr("After %1 payments").arg(page.payment.count))]
+                        : []
+                ).concat(
+                    (!page.payment.count || page.payment.count.length === 0)
+                            && page.payment.untilDate && page.payment.untilDate.length > 0
+                        ? [page.field(qsTr("Until date"), page.payment.untilDate)]
+                        : []
+                ).concat([
                     page.field(qsTr("Updated"), page.payment.updatedAt),
                     page.field(qsTr("Cancelled at"), page.payment.cancelledAt)
-                ]
+                ])
             }
 
             SectionHeader {
