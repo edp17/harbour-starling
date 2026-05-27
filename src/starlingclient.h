@@ -26,18 +26,15 @@ class StarlingClient : public QObject
     Q_PROPERTY(QVariantList transactionRows READ transactionRows NOTIFY transactionsChanged)
     Q_PROPERTY(QVariantList recentTransactions READ recentTransactions NOTIFY transactionsChanged)
     Q_PROPERTY(QString lastUpdated READ lastUpdated NOTIFY lastUpdatedChanged)
-
     Q_PROPERTY(QString accountHolderName READ accountHolderName NOTIFY accountChanged)
     Q_PROPERTY(QString accountName READ accountName NOTIFY accountChanged)
     Q_PROPERTY(QString accountNumber READ accountNumber NOTIFY accountChanged)
     Q_PROPERTY(QString sortCode READ sortCode NOTIFY accountChanged)
     Q_PROPERTY(QString accountType READ accountType NOTIFY accountChanged)
-
     Q_PROPERTY(QString email READ email NOTIFY accountChanged)
     Q_PROPERTY(QString phone READ phone NOTIFY accountChanged)
     Q_PROPERTY(QString postalAddress READ postalAddress NOTIFY accountChanged)
     Q_PROPERTY(QString countryCode READ countryCode NOTIFY accountChanged)
-
     Q_PROPERTY(bool initializing READ initializing NOTIFY initializingChanged)
     Q_PROPERTY(QVariantList payees READ payees NOTIFY payeesChanged)
     Q_PROPERTY(QVariantList cards READ cards NOTIFY cardsChanged)
@@ -51,13 +48,11 @@ class StarlingClient : public QObject
     Q_PROPERTY(bool consentPending READ consentPending NOTIFY consentPendingChanged)
     Q_PROPERTY(QString consentMessage READ consentMessage NOTIFY consentMessageChanged)
     Q_PROPERTY(bool lockOnBackground READ lockOnBackground WRITE setLockOnBackground NOTIFY lockOnBackgroundChanged)
-
     Q_PROPERTY(bool pinEnabled READ pinEnabled NOTIFY pinEnabledChanged)
     Q_PROPERTY(bool pinPromptVisible READ pinPromptVisible NOTIFY pinPromptVisibleChanged)
     Q_PROPERTY(QString pinError READ pinError NOTIFY pinErrorChanged)
     Q_PROPERTY(QString pinSettingsError READ pinSettingsError NOTIFY pinSettingsErrorChanged)
     Q_PROPERTY(bool pinSetupRequired READ pinSetupRequired NOTIFY pinSetupRequiredChanged)
-
     Q_PROPERTY(QVariantMap paymentDraft READ paymentDraft NOTIFY paymentDraftChanged)
     Q_PROPERTY(QString paymentPreviewJson READ paymentPreviewJson NOTIFY paymentPreviewJsonChanged)
     Q_PROPERTY(bool paymentPreviewReady READ paymentPreviewReady NOTIFY paymentPreviewReadyChanged)
@@ -67,65 +62,78 @@ class StarlingClient : public QObject
     Q_PROPERTY(bool pinConfirmationPending READ pinConfirmationPending NOTIFY pinConfirmationPendingChanged)
     Q_PROPERTY(QVariantList sourceAccounts READ sourceAccounts NOTIFY sourceAccountsChanged)
     Q_PROPERTY(bool online READ online NOTIFY onlineChanged)
-
     Q_PROPERTY(QVariantList directDebitMandates READ directDebitMandates NOTIFY directDebitMandatesChanged)
     Q_PROPERTY(QVariantList standingOrders READ standingOrders NOTIFY standingOrdersChanged)
     Q_PROPERTY(QString lastFeedExportCsvPath READ lastFeedExportCsvPath NOTIFY lastFeedExportCsvPathChanged)
     Q_PROPERTY(QVariantList spaces READ spaces NOTIFY spacesChanged)
     Q_PROPERTY(qint64 availableBalanceMinorUnits READ availableBalanceMinorUnits NOTIFY balanceChanged)
     Q_PROPERTY(bool regularPaymentsLoaded READ regularPaymentsLoaded NOTIFY regularPaymentsLoadedChanged)
+    Q_PROPERTY(QVariantList standingOrderUpcomingPayments READ standingOrderUpcomingPayments NOTIFY standingOrderUpcomingPaymentsChanged)
 
 public:
     explicit StarlingClient(QObject *parent = nullptr);
 
     // getters
     QString token() const;
-    void setToken(const QString &token);
-
     QString accountUid() const;
     QString categoryUid() const;
     QString availableBalance() const;
     QString clearedBalance() const;
     QString currency() const;
     QString status() const;
-    bool busy() const;
-    QVariantList transactionRows() const;
-    QVariantList recentTransactions() const;
     QString lastUpdated() const;
-
     QString accountHolderName() const;
     QString accountName() const;
     QString accountNumber() const;
     QString sortCode() const;
     QString accountType() const;
-
     QString email() const;
     QString phone() const;
     QString postalAddress() const;
     QString countryCode() const;
     QString navigationTarget() const;
+    QString pinError() const;
+    QString paymentPreviewJson() const;
+    QString paymentResultMessage() const;
+    QString lastFeedExportCsvPath() const;
+    QString payeeWriteToken() const;
+    QString apiKeyId() const;
+    QString privateApiKeyPem() const;
+    QString consentMessage() const;
+    QString pinSettingsError() const;
+    QVariantList transactionRows() const;
+    QVariantList recentTransactions() const;
+    QVariantMap paymentDraft() const;
+    QVariantList sourceAccounts() const;
+    QVariantList directDebitMandates() const;
+    QVariantList standingOrders() const;
+    QVariantList spaces() const;
+    QVariantList payees() const;
+    QVariantList cards() const;
+    QVariantMap payeeDetail() const;
+    QVariantList standingOrderUpcomingPayments() const;
+    bool busy() const;
     bool pinEnabled() const;
     bool pinPromptVisible() const;
-    QString pinError() const;
     bool pinSetupRequired() const;
-    QVariantMap paymentDraft() const;
-    QString paymentPreviewJson() const;
     bool paymentPreviewReady() const;
     bool paymentSubmitting() const;
     bool paymentSubmitted() const;
-    QString paymentResultMessage() const;
-    QVariantList sourceAccounts() const;
     bool online() const;
-
-    QVariantList directDebitMandates() const;
-    QVariantList standingOrders() const;
-    QString lastFeedExportCsvPath() const;
-
-    QVariantList spaces() const;
-    Q_INVOKABLE void refreshSpaces();
-
-    qint64 availableBalanceMinorUnits() const;
     bool regularPaymentsLoaded() const;
+    bool initializing() const;
+    bool locked() const;
+    bool consentPending() const;
+    bool lockOnBackground() const;
+    bool pinConfirmationPending() const;
+    void setToken(const QString &token);
+    void setPayeeWriteToken(const QString &token);
+    void setApiKeyId(const QString &value);
+    void setPrivateApiKeyPem(const QString &value);
+    void setAutoLockMinutes(int minutes);
+    void setLockOnBackground(bool value);
+    int autoLockMinutes() const;
+    qint64 availableBalanceMinorUnits() const;
 
     // invokables
     Q_INVOKABLE void discoverAccount();
@@ -135,42 +143,23 @@ public:
     Q_INVOKABLE void saveToken();
     Q_INVOKABLE void loadToken();
     Q_INVOKABLE void clearToken();
-
-    bool initializing() const;
     Q_INVOKABLE void initialize(int daysBack = 14);
-    QVariantList payees() const;
     Q_INVOKABLE void refreshPayees();
-    QVariantList cards() const;
     Q_INVOKABLE void refreshCards();
-
-    bool locked() const;
     Q_INVOKABLE void unlock();
     Q_INVOKABLE void lock();
     Q_INVOKABLE void refreshAll(int daysBack = 14);
     Q_INVOKABLE void requestOpenSettings();
     Q_INVOKABLE void clearNavigationTarget();
-
-    QString payeeWriteToken() const;
-    void setPayeeWriteToken(const QString &token);
-
     Q_INVOKABLE void savePayeeWriteToken();
     Q_INVOKABLE void loadPayeeWriteToken();
     Q_INVOKABLE void clearPayeeWriteToken();
-
-    QString apiKeyId() const;
-    void setApiKeyId(const QString &value);
-
     Q_INVOKABLE void saveApiKeyId();
     Q_INVOKABLE void loadApiKeyId();
     Q_INVOKABLE void clearApiKeyId();
-
-    QString privateApiKeyPem() const;
-    void setPrivateApiKeyPem(const QString &value);
-
     Q_INVOKABLE void savePrivateApiKeyPem();
     Q_INVOKABLE void loadPrivateApiKeyPem();
     Q_INVOKABLE void clearPrivateApiKeyPem();
-
     Q_INVOKABLE void createPayee(const QString &payeeName,
                                  const QString &phoneNumber,
                                  const QString &payeeType,
@@ -186,7 +175,6 @@ public:
                                  const QString &bankIdentifier,
                                  const QString &bankIdentifierType,
                                  const QString &secondaryIdentifier);
-
     Q_INVOKABLE void createPayeeAccount(const QString &payeeUid,
                                         const QString &accountDescription,
                                         bool defaultAccount,
@@ -195,7 +183,6 @@ public:
                                         const QString &bankIdentifier,
                                         const QString &bankIdentifierType,
                                         const QString &secondaryIdentifier);
-
     Q_INVOKABLE void updatePayee(const QString &payeeUid,
                                  const QString &payeeName,
                                  const QString &phoneNumber,
@@ -217,15 +204,12 @@ public:
                                       const QString &firstName,
                                       const QString &middleName,
                                       const QString &lastName);
-
     Q_INVOKABLE void deletePayee(const QString &payeeUid);
     Q_INVOKABLE void deletePayeeAccount(const QString &payeeUid, const QString &accountUid);
-    QVariantMap payeeDetail() const;
     Q_INVOKABLE void refreshPayeeDetail(const QString &payeeUid);
     Q_INVOKABLE void updatePayeeAccountDescription(const QString &payeeUid,
                                                    const QString &payeeAccountUid,
                                                    const QString &description);
-
     Q_INVOKABLE void setCardEnabled(const QString &cardUid, bool enabled);
     Q_INVOKABLE void setCardAtmEnabled(const QString &cardUid, bool enabled);
     Q_INVOKABLE void setCardPosEnabled(const QString &cardUid, bool enabled);
@@ -234,17 +218,8 @@ public:
     Q_INVOKABLE void setCardGamblingEnabled(const QString &cardUid, bool enabled);
     Q_INVOKABLE void setCardMagStripeEnabled(const QString &cardUid, bool enabled);
     Q_INVOKABLE void setCardCurrencySwitch(const QString &cardUid, const QString &currency, bool enabled);
-    bool consentPending() const;
-    QString consentMessage() const;
     Q_INVOKABLE void dismissConsentMessage();
-    int autoLockMinutes() const;
-    void setAutoLockMinutes(int minutes);
-
     Q_INVOKABLE void registerUserActivity();
-
-    bool lockOnBackground() const;
-    void setLockOnBackground(bool value);
-
     Q_INVOKABLE bool setAppPin(const QString &pin, const QString &confirmPin);
     Q_INVOKABLE bool changeAppPin(const QString &currentPin,
                                   const QString &newPin,
@@ -252,7 +227,6 @@ public:
     Q_INVOKABLE bool submitPin(const QString &pin);
     Q_INVOKABLE void cancelPinPrompt();
     Q_INVOKABLE void clearPinError();
-    QString pinSettingsError() const;
     Q_INVOKABLE void clearPinSettingsError();
     Q_INVOKABLE void preparePaymentDraft(const QString &sourceAccountUid,
                                          const QString &categoryUid,
@@ -267,42 +241,32 @@ public:
                                          const QString &bankIdentifier,
                                          const QString &amountText,
                                          const QString &reference);
-
     Q_INVOKABLE bool buildPaymentPreview();
     Q_INVOKABLE void clearPaymentDraft();
     Q_INVOKABLE bool submitPreparedPayment();
     Q_INVOKABLE void clearPaymentResult();
-
-    bool pinConfirmationPending() const;
     Q_INVOKABLE void requestPinConfirmation();
     Q_INVOKABLE void clearPinConfirmation();
     Q_INVOKABLE bool changeAppPinAfterConfirmation(const QString &newPin,
                                                    const QString &confirmPin);
-
     Q_INVOKABLE bool hasStoredPhysicalCard() const;
-
     Q_INVOKABLE bool savePhysicalCardAfterConfirmation(const QString &cardholderName,
                                                        const QString &cardNumber,
                                                        const QString &expiryMonth,
                                                        const QString &expiryYear);
-
     Q_INVOKABLE QVariantMap loadStoredPhysicalCardMasked() const;
     Q_INVOKABLE QVariantMap loadStoredPhysicalCardFullAfterConfirmation();
-
     Q_INVOKABLE bool deleteStoredPhysicalCardAfterConfirmation();
-
     Q_INVOKABLE bool hasStoredPhysicalCardPin() const;
     Q_INVOKABLE bool savePhysicalCardPinAfterConfirmation(const QString &pin,
-                                                      const QString &confirmPin);
+                                                   const QString &confirmPin);
     Q_INVOKABLE QString loadStoredPhysicalCardPinAfterConfirmation();
     Q_INVOKABLE bool deleteStoredPhysicalCardPinAfterConfirmation();
-
     Q_INVOKABLE bool hasStoredPhysicalCardCvv() const;
     Q_INVOKABLE bool savePhysicalCardCvvAfterConfirmation(const QString &cvv);
     Q_INVOKABLE QString loadStoredPhysicalCardCvvAfterConfirmation();
     Q_INVOKABLE bool deleteStoredPhysicalCardCvvAfterConfirmation();
     Q_INVOKABLE bool factoryResetAfterConfirmation();
-
     Q_INVOKABLE void refreshDirectDebitMandates();
     Q_INVOKABLE void refreshStandingOrders();
     Q_INVOKABLE void refreshRegularPayments();
@@ -313,6 +277,8 @@ public:
     Q_INVOKABLE void addMoneyToSavingsGoal(const QString &savingsGoalUid, const QString &amount);
     Q_INVOKABLE void withdrawMoneyFromSavingsGoal(const QString &savingsGoalUid, const QString &amount);
     Q_INVOKABLE void deleteSavingsGoal(const QString &savingsGoalUid);
+    Q_INVOKABLE void refreshSpaces();
+    Q_INVOKABLE void refreshStandingOrderUpcomingPayments(const QString &paymentOrderUid);
 
 signals:
     void tokenChanged();
@@ -359,6 +325,7 @@ signals:
     void savingsGoalTransferCompleted();
     void savingsGoalDeleted();
     void regularPaymentsLoadedChanged();
+    void standingOrderUpcomingPaymentsChanged();
 
 private:
     // helpers
@@ -390,7 +357,21 @@ private:
     void setPaymentResultMessage(const QString &value);
     void refreshSourceAccountIdentifiers(const QString &accountUid);
     void setOnline(bool value);
-
+    void sendJsonWithToken(const QString &path,
+                           const QString &httpMethod,
+                           const QJsonObject &payload,
+                           const QString &bearerToken,
+                           const std::function<void(const QByteArray &)> &onSuccess,
+                           bool includeDigestHeader = false);
+    void sendDeleteWithToken(const QString &path,
+                             const QString &bearerToken,
+                             const std::function<void(const QByteArray &)> &onSuccess);
+    void performUnlock();
+    void setPinPromptVisible(bool visible);
+    void setPinError(const QString &value);
+    void transferSavingsGoalMoney(const QString &savingsGoalUid, const QString &amount, bool addMoney);
+    bool verifyPinValue(const QString &pin) const;
+    bool validateNewPin(const QString &pin, const QString &confirmPin, QString *error) const;
     QString formatMinorUnits(qint64 minorUnits, const QString &currencyCode) const;
     QString formatIsoDateTime(const QString &isoString) const;
     QString signedAmountString(const QString &direction,
@@ -404,22 +385,12 @@ private:
                                const QString &postCode,
                                const QString &countryCode) const;
     QString formatSortCode(const QString &sortCode) const;
+    QString m_pendingAction;
+    QString hashPin(const QString &pin, const QString &salt) const;
+    
     QVariantList m_payees;
     QVariantList m_cards;
     QTimer m_relockTimer;
-    QString m_pendingAction;
-
-    void sendJsonWithToken(const QString &path,
-                           const QString &httpMethod,
-                           const QJsonObject &payload,
-                           const QString &bearerToken,
-                           const std::function<void(const QByteArray &)> &onSuccess,
-                           bool includeDigestHeader = false);
-
-    void sendDeleteWithToken(const QString &path,
-                             const QString &bearerToken,
-                             const std::function<void(const QByteArray &)> &onSuccess);
-
     QJsonObject buildPayeeAccountObject(const QString &accountDescription,
                                         bool defaultAccount,
                                         const QString &countryCode,
@@ -427,7 +398,6 @@ private:
                                         const QString &bankIdentifier,
                                         const QString &bankIdentifierType,
                                         const QString &secondaryIdentifier) const;
-
     QJsonObject buildPayeeObject(const QString &payeeName,
                                  const QString &phoneNumber,
                                  const QString &payeeType,
@@ -443,18 +413,11 @@ private:
                                  const QString &bankIdentifier,
                                  const QString &bankIdentifierType,
                                  const QString &secondaryIdentifier) const;
-
-    void performUnlock();
-    void setPinPromptVisible(bool visible);
-    void setPinError(const QString &value);
-    QString hashPin(const QString &pin, const QString &salt) const;
-    bool verifyPinValue(const QString &pin) const;
-    bool validateNewPin(const QString &pin, const QString &confirmPin, QString *error) const;
-    void transferSavingsGoalMoney(const QString &savingsGoalUid, const QString &amount, bool addMoney);
-
 private:
     // members
     QNetworkAccessManager m_nam;
+    QNetworkConfigurationManager m_networkConfigManager;
+    qint64 m_availableBalanceMinorUnits = 0;
     QString m_token;
     QString m_accountUid;
     QString m_categoryUid;
@@ -462,66 +425,59 @@ private:
     QString m_clearedBalance;
     QString m_currency;
     QString m_status;
-    bool m_busy = false;
-    QVariantList m_transactionRows;
     QString m_lastUpdated;
-
     QString m_accountHolderName;
     QString m_accountName;
     QString m_accountNumber;
     QString m_sortCode;
     QString m_accountType;
-
     QString m_email;
     QString m_phone;
     QString m_postalAddress;
     QString m_countryCode;
-    TokenStore m_tokenStore;
-
-    bool m_initializing = false;
-    int m_pendingRequests = 0;
-    int m_startupDaysBack = 14;
-    bool m_locked = false;
     QString m_navigationTarget;
     QString m_payeeWriteToken;
     QString m_apiKeyId;
     QString m_privateApiKeyPem;
-    QVariantMap m_payeeDetail;
-    bool m_consentPending = false;
     QString m_consentMessage;
-    bool responseRequiresConsent(const QByteArray &body, QString *messageOut = 0) const;
-    int m_autoLockMinutes = 2;
-    bool m_lockOnBackground = true;
-
     QString m_pinHash;
     QString m_pinSalt;
-    bool m_pinPromptVisible = false;
     QString m_pinError;
     QString m_pinSettingsError;
-    QVariantMap m_paymentDraft;
     QString m_paymentPreviewJson;
+    QString m_paymentResultMessage;
+    QString buildIsoDateHeader() const;
+    QString m_lastFeedExportCsvPath;
+    bool m_busy = false;
+    bool m_initializing = false;
+    bool m_locked = false;
+    bool m_consentPending = false;
+    bool responseRequiresConsent(const QByteArray &body, QString *messageOut = 0) const;
+    bool m_lockOnBackground = true;
+    bool m_pinPromptVisible = false;
     bool m_paymentPreviewReady = false;
     bool m_paymentSubmitting = false;
     bool m_paymentSubmitted = false;
-    QString m_paymentResultMessage;
-    QString buildIsoDateHeader() const;
+    bool m_pinConfirmationPending = false;
+    bool m_online = true;
+    bool m_directDebitMandatesLoaded = false;
+    bool m_standingOrdersLoaded = false;
+    int m_pendingRequests = 0;
+    int m_startupDaysBack = 14;
+    int m_autoLockMinutes = 2;
+    QVariantList m_transactionRows;
+    QVariantList m_sourceAccounts;
+    QVariantList m_directDebitMandates;
+    QVariantList m_standingOrders;
+    QVariantList m_spaces;
+    QVariantList m_standingOrderUpcomingPayments;
+    QVariantMap m_payeeDetail;
+    QVariantMap m_paymentDraft;
+    TokenStore m_tokenStore;
     QByteArray buildDigestHeader(const QByteArray &body) const;
     QByteArray signWithRsaSha512(const QByteArray &content,
                                  const QString &privateKeyPem,
                                  QString *errorMessage) const;
-    bool m_pinConfirmationPending = false;
-    QVariantList m_sourceAccounts;
-    QNetworkConfigurationManager m_networkConfigManager;
-    bool m_online = true;
-
-    QVariantList m_directDebitMandates;
-    QVariantList m_standingOrders;
-    QString m_lastFeedExportCsvPath;
-    QVariantList m_spaces;
-
-    qint64 m_availableBalanceMinorUnits = 0;
-    bool m_directDebitMandatesLoaded = false;
-    bool m_standingOrdersLoaded = false;
 };
 
 #endif // STARLINGCLIENT_H

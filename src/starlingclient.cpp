@@ -432,6 +432,11 @@ void StarlingClient::downloadFeedExportCsvRange(const QString &startDate, const 
 }
 
 // Direct Debits/Mandates & Standing Orders
+QVariantList StarlingClient::standingOrderUpcomingPayments() const
+{
+    return m_standingOrderUpcomingPayments;
+}
+
 bool StarlingClient::regularPaymentsLoaded() const
 {
     return m_directDebitMandatesLoaded && m_standingOrdersLoaded;
@@ -455,6 +460,66 @@ void StarlingClient::refreshRegularPayments()
 
     refreshDirectDebitMandates();
     refreshStandingOrders();
+}
+
+void StarlingClient::refreshStandingOrderUpcomingPayments(const QString &paymentOrderUid)
+{
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedUid = paymentOrderUid.trimmed();
+    if (trimmedUid.isEmpty()) {
+        setStatus(QStringLiteral("Standing Order UID is missing."));
+        return;
+    }
+
+    m_standingOrderUpcomingPayments.clear();
+    emit standingOrderUpcomingPaymentsChanged();
+
+    setStatus(QStringLiteral("Loading upcoming payments..."));
+
+    const QString path =
+            QStringLiteral("/api/v2/payments/local/account/%1/category/%2/standing-orders/%3/upcoming-payments")
+            .arg(m_accountUid)
+            .arg(m_categoryUid)
+            .arg(trimmedUid);
+
+    getJson(path, [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QJsonArray items = root.value(QStringLiteral("upcomingPayments")).toArray();
+        if (items.isEmpty())
+            items = root.value(QStringLiteral("payments")).toArray();
+
+        QVariantList rows;
+
+        for (int i = 0; i < items.size(); ++i) {
+            const QJsonObject item = items.at(i).toObject();
+
+            QVariantMap row;
+            row.insert(QStringLiteral("date"),
+                       item.value(QStringLiteral("date")).toString(
+                           item.value(QStringLiteral("paymentDate")).toString(
+                               item.value(QStringLiteral("scheduledDate")).toString())));
+
+            const QJsonObject amount = item.value(QStringLiteral("amount")).toObject();
+            const QString currency = amount.value(QStringLiteral("currency")).toString(QStringLiteral("GBP"));
+            const qint64 minor = amount.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
+
+            row.insert(QStringLiteral("amount"), minor > 0 ? formatMinorUnits(minor, currency) : QString());
+            row.insert(QStringLiteral("status"), item.value(QStringLiteral("status")).toString());
+
+            rows.append(row);
+        }
+
+        m_standingOrderUpcomingPayments = rows;
+        emit standingOrderUpcomingPaymentsChanged();
+
+        setStatus(QStringLiteral("Loaded %1 upcoming payment(s).").arg(rows.size()));
+    });
 }
 
 void StarlingClient::refreshDirectDebitMandates()

@@ -98,7 +98,7 @@ Page {
             MenuItem {
                 enabled: page.readyForContent
                 visible: page.readyForContent
-                text: qsTr("Transaction export")
+                text: qsTr("Export transactions")
                 onClicked: pageStack.push(Qt.resolvedUrl("FeedExportPage.qml"))
             }
             MenuItem {
