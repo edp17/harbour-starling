@@ -64,6 +64,11 @@ Page {
         return value && String(value).length > 0 ? value : "-"
     }
 
+    Component.onCompleted: {
+        if (transactionData.feedItemUid && transactionData.feedItemUid.length > 0)
+            starlingClient.refreshTransactionDetail(transactionData.feedItemUid)
+    }
+
     SilicaFlickable {
         anchors.fill: parent
         contentHeight: contentColumn.height + Theme.paddingLarge
@@ -284,6 +289,78 @@ Page {
                             text: shown(rawDateText)
                             color: Theme.primaryColor
                         }
+                    }
+                }
+            }
+
+            Rectangle {
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * x
+                height: extraDetailColumn.height + 2 * Theme.paddingMedium
+
+                radius: Theme.paddingMedium
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
+                border.width: 1
+                border.color: Theme.rgba(Theme.primaryColor, 0.15)
+
+                Column {
+                    id: extraDetailColumn
+                    x: Theme.paddingMedium
+                    y: Theme.paddingMedium
+                    width: parent.width - 2 * Theme.paddingMedium
+                    spacing: Theme.paddingSmall
+
+                    Label {
+                        width: parent.width
+                        text: qsTr("Extra details")
+                        color: Theme.highlightColor
+                        font.pixelSize: Theme.fontSizeMedium
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: starlingClient.transactionDetail.feedItemUid !== transactionData.feedItemUid
+                        text: qsTr("Loading details...")
+                        color: Theme.secondaryColor
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: starlingClient.transactionDetail.feedItemUid === transactionData.feedItemUid
+                        text: qsTr("Source: %1").arg(starlingClient.transactionDetail.source || "-")
+                        color: Theme.primaryColor
+                        wrapMode: Text.Wrap
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: starlingClient.transactionDetail.feedItemUid === transactionData.feedItemUid
+                               && starlingClient.transactionDetail.counterPartyType
+                               && starlingClient.transactionDetail.counterPartyType.length > 0
+                        text: qsTr("Counterparty type: %1").arg(starlingClient.transactionDetail.counterPartyType)
+                        color: Theme.primaryColor
+                        wrapMode: Text.Wrap
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: starlingClient.transactionDetail.feedItemUid === transactionData.feedItemUid
+                               && starlingClient.transactionDetail.settlementTime
+                               && starlingClient.transactionDetail.settlementTime.length > 0
+                        text: qsTr("Settled: %1").arg(starlingClient.transactionDetail.settlementTime)
+                        color: Theme.primaryColor
+                        wrapMode: Text.Wrap
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: starlingClient.transactionDetail.feedItemUid === transactionData.feedItemUid
+                        text: qsTr("Updated: %1").arg(starlingClient.transactionDetail.updatedAt || "-")
+                        color: Theme.secondaryColor
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall
                     }
                 }
             }

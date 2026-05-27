@@ -71,6 +71,7 @@ class StarlingClient : public QObject
     Q_PROPERTY(QVariantList standingOrderUpcomingPayments READ standingOrderUpcomingPayments NOTIFY standingOrderUpcomingPaymentsChanged)
     Q_PROPERTY(QVariantList standingOrderPaymentHistory READ standingOrderPaymentHistory NOTIFY standingOrderPaymentHistoryChanged)
     Q_PROPERTY(QVariantList directDebitPayments READ directDebitPayments NOTIFY directDebitPaymentsChanged)
+    Q_PROPERTY(QVariantMap transactionDetail READ transactionDetail NOTIFY transactionDetailChanged)
 
 public:
     explicit StarlingClient(QObject *parent = nullptr);
@@ -103,9 +104,11 @@ public:
     QString privateApiKeyPem() const;
     QString consentMessage() const;
     QString pinSettingsError() const;
+    QVariantMap paymentDraft() const;
+    QVariantMap transactionDetail() const;
+    QVariantMap payeeDetail() const;
     QVariantList transactionRows() const;
     QVariantList recentTransactions() const;
-    QVariantMap paymentDraft() const;
     QVariantList sourceAccounts() const;
     QVariantList directDebitMandates() const;
     QVariantList standingOrders() const;
@@ -114,7 +117,6 @@ public:
     QVariantList cards() const;
     QVariantList directDebitPayments() const;
     QVariantList standingOrderPaymentHistory() const;
-    QVariantMap payeeDetail() const;
     QVariantList standingOrderUpcomingPayments() const;
     bool busy() const;
     bool pinEnabled() const;
@@ -287,6 +289,7 @@ public:
     Q_INVOKABLE void refreshStandingOrderPaymentHistory(const QString &paymentOrderUid);
     Q_INVOKABLE void refreshDirectDebitPayments(const QString &mandateUid);
     Q_INVOKABLE void updateTransactionCategory(const QString &feedItemUid, const QString &category);
+    Q_INVOKABLE void refreshTransactionDetail(const QString &feedItemUid);
 
 signals:
     void tokenChanged();
@@ -338,6 +341,7 @@ signals:
     void directDebitPaymentsChanged();
     void transactionNoteUpdated(const QString &feedItemUid, const QString &note);
     void transactionCategoryUpdated(const QString &feedItemUid, const QString &category);
+    void transactionDetailChanged();
 
 private:
     // helpers
@@ -487,6 +491,7 @@ private:
     QVariantList m_directDebitPayments;
     QVariantMap m_payeeDetail;
     QVariantMap m_paymentDraft;
+    QVariantMap m_transactionDetail;
     TokenStore m_tokenStore;
     QByteArray buildDigestHeader(const QByteArray &body) const;
     QByteArray signWithRsaSha512(const QByteArray &content,

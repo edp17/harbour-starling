@@ -68,6 +68,75 @@ StarlingClient::StarlingClient(QObject *parent)
     });
 }
 
+// Transactions
+QVariantMap StarlingClient::transactionDetail() const
+{
+    return m_transactionDetail;
+}
+
+void StarlingClient::refreshTransactionDetail(const QString &feedItemUid)
+{
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedUid = feedItemUid.trimmed();
+
+    if (trimmedUid.isEmpty()) {
+        setStatus(QStringLiteral("Transaction UID is missing."));
+        return;
+    }
+
+    m_transactionDetail.clear();
+    emit transactionDetailChanged();
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/category/%2/%3")
+            .arg(m_accountUid)
+            .arg(m_categoryUid)
+            .arg(trimmedUid);
+
+    setStatus(QStringLiteral("Loading transaction details..."));
+
+    getJson(path, [this, trimmedUid](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        QJsonObject item = doc.object();
+
+        if (item.contains(QStringLiteral("feedItem")))
+            item = item.value(QStringLiteral("feedItem")).toObject();
+
+        QVariantMap detail;
+        detail.insert(QStringLiteral("feedItemUid"), trimmedUid);
+        detail.insert(QStringLiteral("counterPartyName"), item.value(QStringLiteral("counterPartyName")).toString());
+        detail.insert(QStringLiteral("counterPartyType"), item.value(QStringLiteral("counterPartyType")).toString());
+        detail.insert(QStringLiteral("reference"), item.value(QStringLiteral("reference")).toString());
+        detail.insert(QStringLiteral("userNote"), item.value(QStringLiteral("userNote")).toString());
+        detail.insert(QStringLiteral("spendingCategory"), item.value(QStringLiteral("spendingCategory")).toString());
+        detail.insert(QStringLiteral("status"), item.value(QStringLiteral("status")).toString());
+        detail.insert(QStringLiteral("source"), item.value(QStringLiteral("source")).toString());
+        detail.insert(QStringLiteral("direction"), item.value(QStringLiteral("direction")).toString());
+        detail.insert(QStringLiteral("transactionTime"), formatIsoDateTime(item.value(QStringLiteral("transactionTime")).toString()));
+        detail.insert(QStringLiteral("settlementTime"), formatIsoDateTime(item.value(QStringLiteral("settlementTime")).toString()));
+        detail.insert(QStringLiteral("updatedAt"), formatIsoDateTime(item.value(QStringLiteral("updatedAt")).toString()));
+
+        const QJsonObject amount = item.value(QStringLiteral("amount")).toObject();
+        const QString currency = amount.value(QStringLiteral("currency")).toString(QStringLiteral("GBP"));
+        const qint64 minor = amount.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
+
+        detail.insert(QStringLiteral("amount"), signedAmountString(detail.value(QStringLiteral("direction")).toString(),
+                                                                   minor,
+                                                                   currency));
+        detail.insert(QStringLiteral("currency"), currency);
+
+        m_transactionDetail = detail;
+        emit transactionDetailChanged();
+
+        touchLastUpdated();
+        setStatus(QStringLiteral("Transaction details loaded."));
+    });
+}
+
 // Spaces
 QVariantList StarlingClient::spaces() const
 {
