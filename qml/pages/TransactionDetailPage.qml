@@ -35,6 +35,11 @@ Page {
     property string categoryText: transactionData && transactionData.category ? transactionData.category : "-"
     property string directionText: transactionData && transactionData.direction ? transactionData.direction : "-"
     property string currencyText: transactionData && transactionData.currency ? transactionData.currency : "-"
+    property string pageError: ""
+
+    function canEditNote() {
+        return transactionData.feedItemUid && transactionData.feedItemUid.length > 0
+    }
 
     function shown(value) {
         return value && String(value).length > 0 ? value : "-"
@@ -264,9 +269,75 @@ Page {
                 }
             }
 
+            Rectangle {
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * x
+                height: noteColumn.height + 2 * Theme.paddingMedium
+
+                radius: Theme.paddingMedium
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.08)
+                border.width: 1
+                border.color: Theme.rgba(Theme.primaryColor, 0.10)
+
+                Column {
+                    id: noteColumn
+                    x: Theme.paddingMedium
+                    y: Theme.paddingMedium
+                    width: parent.width - 2 * Theme.paddingMedium
+                    spacing: Theme.paddingMedium
+
+                    Label {
+                        width: parent.width
+                        text: qsTr("Note")
+                        color: Theme.highlightColor
+                        font.pixelSize: Theme.fontSizeMedium
+                        font.bold: true
+                    }
+
+                    TextArea {
+                        id: noteField
+                        width: parent.width
+                        label: qsTr("Transaction note")
+                        placeholderText: qsTr("Add a note...")
+                        text: transactionData.userNote || ""
+                        enabled: page.canEditNote() && !starlingClient.busy
+                    }
+
+                    Button {
+                        width: parent.width
+                        enabled: page.canEditNote() && !starlingClient.busy
+                        text: starlingClient.busy ? qsTr("Saving...") : qsTr("Save note")
+                        onClicked: starlingClient.updateTransactionNote(transactionData.feedItemUid,
+                                                                        noteField.text)
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: !page.canEditNote()
+                        text: qsTr("This transaction cannot be edited because its feed item ID is missing.")
+                        color: Theme.secondaryColor
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+                }
+            }
+
             Item {
                 width: 1
                 height: Theme.paddingMedium
+            }
+        }
+    }
+
+    Connections {
+        target: starlingClient
+
+        onTransactionNoteUpdated: {
+            if (feedItemUid === transactionData.feedItemUid) {
+                var updated = transactionData
+                updated.userNote = note
+                transactionData = updated
+                noteField.text = note
             }
         }
     }

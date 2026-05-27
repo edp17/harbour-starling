@@ -4022,6 +4022,58 @@ void StarlingClient::refreshBalance()
     });
 }
 
+void StarlingClient::updateTransactionNote(const QString &feedItemUid, const QString &note)
+{
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedUid = feedItemUid.trimmed();
+
+    if (trimmedUid.isEmpty()) {
+        setStatus(QStringLiteral("Transaction UID is missing."));
+        return;
+    }
+
+    QJsonObject body;
+    body.insert(QStringLiteral("userNote"), note.trimmed());
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/category/%2/%3/user-note")
+            .arg(m_accountUid)
+            .arg(m_categoryUid)
+            .arg(trimmedUid);
+
+    setStatus(QStringLiteral("Saving transaction note..."));
+
+    sendJsonWithToken(path,
+                      QStringLiteral("PUT"),
+                      body,
+                      m_token,
+                      [this, trimmedUid, note](const QByteArray &) {
+        for (int i = 0; i < m_transactionRows.size(); ++i) {
+            QVariantMap row = m_transactionRows.at(i).toMap();
+
+            if (row.value(QStringLiteral("rowType")).toString() != QStringLiteral("transaction"))
+                continue;
+
+            if (row.value(QStringLiteral("feedItemUid")).toString() != trimmedUid)
+                continue;
+
+            row.insert(QStringLiteral("userNote"), note.trimmed());
+            m_transactionRows[i] = row;
+            break;
+        }
+
+        emit transactionsChanged();
+        emit transactionNoteUpdated(trimmedUid, note.trimmed());
+
+        touchLastUpdated();
+        setStatus(QStringLiteral("Transaction note saved."));
+    });
+}
+
 void StarlingClient::refreshTransactions(int daysBack)
 {
     if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
@@ -4095,6 +4147,8 @@ void StarlingClient::refreshTransactions(int daysBack)
             tx.insert("section", section);
             tx.insert("status", status);
             tx.insert("category", spendingCategory);
+            tx.insert("feedItemUid", item.value("feedItemUid").toString());
+            tx.insert("userNote", item.value("userNote").toString());
 
             newRows.append(tx);
         }
@@ -4202,6 +4256,8 @@ void StarlingClient::refreshTransactionsRange(const QString &fromDate, const QSt
             tx.insert(QStringLiteral("section"), section);
             tx.insert(QStringLiteral("status"), status);
             tx.insert(QStringLiteral("category"), spendingCategory);
+            tx.insert(QStringLiteral("feedItemUid"), item.value(QStringLiteral("feedItemUid")).toString());
+            tx.insert(QStringLiteral("userNote"), item.value(QStringLiteral("userNote")).toString());
 
             newRows.append(tx);
         }

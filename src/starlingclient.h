@@ -71,6 +71,7 @@ class StarlingClient : public QObject
     Q_PROPERTY(QVariantList standingOrderUpcomingPayments READ standingOrderUpcomingPayments NOTIFY standingOrderUpcomingPaymentsChanged)
     Q_PROPERTY(QVariantList standingOrderPaymentHistory READ standingOrderPaymentHistory NOTIFY standingOrderPaymentHistoryChanged)
     Q_PROPERTY(QVariantList directDebitPayments READ directDebitPayments NOTIFY directDebitPaymentsChanged)
+    Q_INVOKABLE void updateTransactionNote(const QString &feedItemUid, const QString &note);
 
 public:
     explicit StarlingClient(QObject *parent = nullptr);
@@ -334,6 +335,7 @@ signals:
     void standingOrderUpcomingPaymentsChanged();
     void standingOrderPaymentHistoryChanged();
     void directDebitPaymentsChanged();
+    void transactionNoteUpdated(const QString &feedItemUid, const QString &note);
 
 private:
     // helpers
