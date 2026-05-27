@@ -69,6 +69,59 @@ StarlingClient::StarlingClient(QObject *parent)
 }
 
 // Transactions
+QVariantMap StarlingClient::transactionMastercardDetails() const
+{
+    return m_transactionMastercardDetails;
+}
+
+void StarlingClient::refreshTransactionMastercardDetails(const QString &feedItemUid)
+{
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedUid = feedItemUid.trimmed();
+
+    if (trimmedUid.isEmpty()) {
+        setStatus(QStringLiteral("Transaction UID is missing."));
+        return;
+    }
+
+    m_transactionMastercardDetails.clear();
+    emit transactionMastercardDetailsChanged();
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/category/%2/%3/mastercard")
+            .arg(m_accountUid)
+            .arg(m_categoryUid)
+            .arg(trimmedUid);
+
+    setStatus(QStringLiteral("Loading card transaction details..."));
+
+    getJson(path, [this, trimmedUid](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QVariantMap details;
+        details.insert(QStringLiteral("feedItemUid"), trimmedUid);
+        details.insert(QStringLiteral("merchantName"), root.value(QStringLiteral("merchantName")).toString());
+        details.insert(QStringLiteral("merchantCategoryCode"), root.value(QStringLiteral("merchantCategoryCode")).toString());
+        details.insert(QStringLiteral("merchantCategory"), root.value(QStringLiteral("merchantCategory")).toString());
+        details.insert(QStringLiteral("merchantCountry"), root.value(QStringLiteral("merchantCountry")).toString());
+        details.insert(QStringLiteral("merchantCity"), root.value(QStringLiteral("merchantCity")).toString());
+        details.insert(QStringLiteral("cardLastFour"), root.value(QStringLiteral("cardLastFour")).toString());
+        details.insert(QStringLiteral("cardPresent"), root.value(QStringLiteral("cardPresent")).toBool());
+        details.insert(QStringLiteral("wallet"), root.value(QStringLiteral("wallet")).toString());
+        details.insert(QStringLiteral("posEntryMode"), root.value(QStringLiteral("posEntryMode")).toString());
+
+        m_transactionMastercardDetails = details;
+        emit transactionMastercardDetailsChanged();
+
+        setStatus(QStringLiteral("Card transaction details loaded."));
+    });
+}
+
 QVariantList StarlingClient::transactionReceipts() const
 {
     return m_transactionReceipts;

@@ -74,6 +74,7 @@ class StarlingClient : public QObject
     Q_PROPERTY(QVariantMap transactionDetail READ transactionDetail NOTIFY transactionDetailChanged)
     Q_PROPERTY(QVariantList transactionAttachments READ transactionAttachments NOTIFY transactionAttachmentsChanged)
     Q_PROPERTY(QVariantList transactionReceipts READ transactionReceipts NOTIFY transactionReceiptsChanged)
+    Q_PROPERTY(QVariantMap transactionMastercardDetails READ transactionMastercardDetails NOTIFY transactionMastercardDetailsChanged)
 
 public:
     explicit StarlingClient(QObject *parent = nullptr);
@@ -109,6 +110,7 @@ public:
     QVariantMap paymentDraft() const;
     QVariantMap transactionDetail() const;
     QVariantMap payeeDetail() const;
+    QVariantMap transactionMastercardDetails() const;
     QVariantList transactionRows() const;
     QVariantList recentTransactions() const;
     QVariantList sourceAccounts() const;
@@ -296,6 +298,7 @@ public:
     Q_INVOKABLE void refreshTransactionDetail(const QString &feedItemUid);
     Q_INVOKABLE void refreshTransactionAttachments(const QString &feedItemUid);
     Q_INVOKABLE void refreshTransactionReceipts(const QString &feedItemUid);
+    Q_INVOKABLE void refreshTransactionMastercardDetails(const QString &feedItemUid);
 
 signals:
     void tokenChanged();
@@ -350,6 +353,7 @@ signals:
     void transactionDetailChanged();
     void transactionAttachmentsChanged();
     void transactionReceiptsChanged();
+    void transactionMastercardDetailsChanged();
 
 private:
     // helpers
@@ -502,6 +506,7 @@ private:
     QVariantMap m_payeeDetail;
     QVariantMap m_paymentDraft;
     QVariantMap m_transactionDetail;
+    QVariantMap m_transactionMastercardDetails;
     TokenStore m_tokenStore;
     QByteArray buildDigestHeader(const QByteArray &body) const;
     QByteArray signWithRsaSha512(const QByteArray &content,
