@@ -74,9 +74,9 @@ Page {
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * x
                 visible: page.readyForContent && starlingClient.directDebitMandates.length === 0
-                text: starlingClient.directDebitMandates.length === 0
-                      ? qsTr("No Direct Debits found.")
-                      : ""
+                text: !starlingClient.regularPaymentsLoaded
+                      ? qsTr("Loading Direct Debits...")
+                      : qsTr("No Direct Debits found.")
                 color: Theme.secondaryColor
                 wrapMode: Text.Wrap
             }
@@ -153,7 +153,9 @@ Page {
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * x
                 visible: page.readyForContent && starlingClient.standingOrders.length === 0
-                text: qsTr("No Standing Orders found.")
+                text: !starlingClient.regularPaymentsLoaded
+                      ? qsTr("Loading Standing Orders...")
+                      : qsTr("No Standing Orders found.")
                 color: Theme.secondaryColor
                 wrapMode: Text.Wrap
             }

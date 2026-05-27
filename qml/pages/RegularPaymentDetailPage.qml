@@ -66,6 +66,24 @@ Page {
         }
     }
 
+    function standingOrderDestinationLoaded() {
+        if (!page.isStandingOrder)
+            return true
+
+        if (!page.payment.payeeUid || page.payment.payeeUid.length === 0)
+            return true
+
+        return standingOrderPayeeDetail
+                && standingOrderPayeeDetail.payeeUid === page.payment.payeeUid
+    }
+
+    function fieldOrLoading(label, value) {
+        if (!page.standingOrderDestinationLoaded())
+            return label + ": " + qsTr("Loading...")
+
+        return page.field(label, value)
+    }
+
     function standingOrderAccount() {
         if (!page.isStandingOrder)
             return null
@@ -182,10 +200,10 @@ Page {
                     page.field(qsTr("Originator UID"), page.payment.originatorUid),
                     page.field(qsTr("Merchant UID"), page.payment.merchantUid)
                 ] : [
-                    page.field(qsTr("Name"), page.standingOrderPayeeName()),
-                    page.field(qsTr("Account number"), page.standingOrderAccount() ? page.standingOrderAccount().accountIdentifier : ""),
-                    page.field(qsTr("Sort code"), page.standingOrderAccount() ? page.standingOrderAccount().bankIdentifier : ""),
-                    page.field(qsTr("Account description"), page.standingOrderAccount() ? page.standingOrderAccount().description : ""),
+                    page.fieldOrLoading(qsTr("Name"), page.standingOrderPayeeName()),
+                    page.fieldOrLoading(qsTr("Account number"), page.standingOrderAccount() ? page.standingOrderAccount().accountIdentifier : ""),
+                    page.fieldOrLoading(qsTr("Sort code"), page.standingOrderAccount() ? page.standingOrderAccount().bankIdentifier : ""),
+                    page.fieldOrLoading(qsTr("Account description"), page.standingOrderAccount() ? page.standingOrderAccount().description : ""),
                     page.field(qsTr("Reference"), page.payment.reference),
                     page.field(qsTr("Spending category"), page.payment.spendingCategory)
                 ]

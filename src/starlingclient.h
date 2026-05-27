@@ -73,6 +73,7 @@ class StarlingClient : public QObject
     Q_PROPERTY(QString lastFeedExportCsvPath READ lastFeedExportCsvPath NOTIFY lastFeedExportCsvPathChanged)
     Q_PROPERTY(QVariantList spaces READ spaces NOTIFY spacesChanged)
     Q_PROPERTY(qint64 availableBalanceMinorUnits READ availableBalanceMinorUnits NOTIFY balanceChanged)
+    Q_PROPERTY(bool regularPaymentsLoaded READ regularPaymentsLoaded NOTIFY regularPaymentsLoadedChanged)
 
 public:
     explicit StarlingClient(QObject *parent = nullptr);
@@ -124,6 +125,7 @@ public:
     Q_INVOKABLE void refreshSpaces();
 
     qint64 availableBalanceMinorUnits() const;
+    bool regularPaymentsLoaded() const;
 
     // invokables
     Q_INVOKABLE void discoverAccount();
@@ -356,6 +358,7 @@ signals:
     void savingsGoalCreated();
     void savingsGoalTransferCompleted();
     void savingsGoalDeleted();
+    void regularPaymentsLoadedChanged();
 
 private:
     // helpers
@@ -517,6 +520,8 @@ private:
     QVariantList m_spaces;
 
     qint64 m_availableBalanceMinorUnits = 0;
+    bool m_directDebitMandatesLoaded = false;
+    bool m_standingOrdersLoaded = false;
 };
 
 #endif // STARLINGCLIENT_H

@@ -432,6 +432,11 @@ void StarlingClient::downloadFeedExportCsvRange(const QString &startDate, const 
 }
 
 // Direct Debits/Mandates & Standing Orders
+bool StarlingClient::regularPaymentsLoaded() const
+{
+    return m_directDebitMandatesLoaded && m_standingOrdersLoaded;
+}
+
 QVariantList StarlingClient::directDebitMandates() const
 {
     return m_directDebitMandates;
@@ -444,6 +449,10 @@ QVariantList StarlingClient::standingOrders() const
 
 void StarlingClient::refreshRegularPayments()
 {
+    m_directDebitMandatesLoaded = false;
+    m_standingOrdersLoaded = false;
+    emit regularPaymentsLoadedChanged();
+
     refreshDirectDebitMandates();
     refreshStandingOrders();
 }
@@ -507,6 +516,8 @@ void StarlingClient::refreshDirectDebitMandates()
 
         m_directDebitMandates = rows;
         emit directDebitMandatesChanged();
+        m_directDebitMandatesLoaded = true;
+        emit regularPaymentsLoadedChanged();
 
         touchLastUpdated();
         setStatus(QStringLiteral("Loaded %1 Direct Debit mandate(s).").arg(rows.size()));
@@ -580,6 +591,8 @@ void StarlingClient::refreshStandingOrders()
 
         m_standingOrders = rows;
         emit standingOrdersChanged();
+        m_standingOrdersLoaded = true;
+        emit regularPaymentsLoadedChanged();
 
         touchLastUpdated();
         setStatus(QStringLiteral("Loaded %1 Standing Order(s).").arg(rows.size()));
