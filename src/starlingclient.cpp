@@ -69,6 +69,71 @@ StarlingClient::StarlingClient(QObject *parent)
 }
 
 // Transactions
+QVariantList StarlingClient::transactionReceipts() const
+{
+    return m_transactionReceipts;
+}
+
+void StarlingClient::refreshTransactionReceipts(const QString &feedItemUid)
+{
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedUid = feedItemUid.trimmed();
+
+    if (trimmedUid.isEmpty()) {
+        setStatus(QStringLiteral("Transaction UID is missing."));
+        return;
+    }
+
+    m_transactionReceipts.clear();
+    emit transactionReceiptsChanged();
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/category/%2/%3/receipts")
+            .arg(m_accountUid)
+            .arg(m_categoryUid)
+            .arg(trimmedUid);
+
+    setStatus(QStringLiteral("Loading transaction receipts..."));
+
+    getJson(path, [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QJsonArray items = root.value(QStringLiteral("receipts")).toArray();
+        if (items.isEmpty())
+            items = root.value(QStringLiteral("feedItemReceipts")).toArray();
+
+        QVariantList rows;
+
+        for (int i = 0; i < items.size(); ++i) {
+            const QJsonObject item = items.at(i).toObject();
+
+            QVariantMap row;
+            row.insert(QStringLiteral("receiptUid"),
+                       item.value(QStringLiteral("receiptUid")).toString(
+                           item.value(QStringLiteral("uid")).toString()));
+            row.insert(QStringLiteral("name"),
+                       item.value(QStringLiteral("name")).toString(
+                           item.value(QStringLiteral("merchantName")).toString()));
+            row.insert(QStringLiteral("createdAt"),
+                       formatIsoDateTime(item.value(QStringLiteral("createdAt")).toString()));
+            row.insert(QStringLiteral("total"),
+                       item.value(QStringLiteral("total")).toString());
+
+            rows.append(row);
+        }
+
+        m_transactionReceipts = rows;
+        emit transactionReceiptsChanged();
+
+        setStatus(QStringLiteral("Loaded %1 receipt(s).").arg(rows.size()));
+    });
+}
+
 QVariantList StarlingClient::transactionAttachments() const
 {
     return m_transactionAttachments;
