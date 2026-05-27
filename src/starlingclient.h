@@ -286,6 +286,7 @@ public:
     Q_INVOKABLE void refreshStandingOrderUpcomingPayments(const QString &paymentOrderUid);
     Q_INVOKABLE void refreshStandingOrderPaymentHistory(const QString &paymentOrderUid);
     Q_INVOKABLE void refreshDirectDebitPayments(const QString &mandateUid);
+    Q_INVOKABLE void updateTransactionCategory(const QString &feedItemUid, const QString &category);
 
 signals:
     void tokenChanged();
@@ -336,6 +337,7 @@ signals:
     void standingOrderPaymentHistoryChanged();
     void directDebitPaymentsChanged();
     void transactionNoteUpdated(const QString &feedItemUid, const QString &note);
+    void transactionCategoryUpdated(const QString &feedItemUid, const QString &category);
 
 private:
     // helpers

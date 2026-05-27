@@ -4074,6 +4074,64 @@ void StarlingClient::updateTransactionNote(const QString &feedItemUid, const QSt
     });
 }
 
+void StarlingClient::updateTransactionCategory(const QString &feedItemUid, const QString &category)
+{
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedUid = feedItemUid.trimmed();
+    const QString trimmedCategory = category.trimmed();
+
+    if (trimmedUid.isEmpty()) {
+        setStatus(QStringLiteral("Transaction UID is missing."));
+        return;
+    }
+
+    if (trimmedCategory.isEmpty()) {
+        setStatus(QStringLiteral("Spending category is missing."));
+        return;
+    }
+
+    QJsonObject body;
+    body.insert(QStringLiteral("spendingCategory"), trimmedCategory);
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/category/%2/%3/spending-category")
+            .arg(m_accountUid)
+            .arg(m_categoryUid)
+            .arg(trimmedUid);
+
+    setStatus(QStringLiteral("Saving transaction category..."));
+
+    sendJsonWithToken(path,
+                      QStringLiteral("PUT"),
+                      body,
+                      m_token,
+                      [this, trimmedUid, trimmedCategory](const QByteArray &) {
+        for (int i = 0; i < m_transactionRows.size(); ++i) {
+            QVariantMap row = m_transactionRows.at(i).toMap();
+
+            if (row.value(QStringLiteral("rowType")).toString() != QStringLiteral("transaction"))
+                continue;
+
+            if (row.value(QStringLiteral("feedItemUid")).toString() != trimmedUid)
+                continue;
+
+            row.insert(QStringLiteral("category"), trimmedCategory);
+            m_transactionRows[i] = row;
+            break;
+        }
+
+        emit transactionsChanged();
+        emit transactionCategoryUpdated(trimmedUid, trimmedCategory);
+
+        touchLastUpdated();
+        setStatus(QStringLiteral("Transaction category saved."));
+    });
+}
+
 void StarlingClient::refreshTransactions(int daysBack)
 {
     if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {

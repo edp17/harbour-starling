@@ -36,8 +36,26 @@ Page {
     property string directionText: transactionData && transactionData.direction ? transactionData.direction : "-"
     property string currencyText: transactionData && transactionData.currency ? transactionData.currency : "-"
     property bool editingNote: false
+    property bool editingCategory: false
+    property var categoryOptions: [
+        "GENERAL",
+        "GROCERIES",
+        "EATING_OUT",
+        "TRANSPORT",
+        "FUEL",
+        "BILLS_AND_SERVICES",
+        "SHOPPING",
+        "ENTERTAINMENT",
+        "HOLIDAYS",
+        "SAVING"
+    ]
+    property string selectedCategory: transactionData.category || "GENERAL"
 
     function canEditNote() {
+        return transactionData.feedItemUid && transactionData.feedItemUid.length > 0
+    }
+
+    function canEditCategory() {
         return transactionData.feedItemUid && transactionData.feedItemUid.length > 0
     }
 
@@ -272,12 +290,101 @@ Page {
             Rectangle {
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * x
+                height: categoryColumn.height + 2 * Theme.paddingMedium
+
+                radius: Theme.paddingMedium
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
+                border.width: 1
+                border.color: Theme.rgba(Theme.primaryColor, 0.15)
+
+                Column {
+                    id: categoryColumn
+                    x: Theme.paddingMedium
+                    y: Theme.paddingMedium
+                    width: parent.width - 2 * Theme.paddingMedium
+                    spacing: Theme.paddingMedium
+
+                    Label {
+                        width: parent.width
+                        text: qsTr("Category")
+                        color: Theme.highlightColor
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: !page.editingCategory
+                        text: transactionData.category || qsTr("No category")
+                        color: Theme.primaryColor
+                        wrapMode: Text.Wrap
+                    }
+
+                    TextSwitch {
+                        id: editCategorySwitch
+                        width: parent.width
+                        text: qsTr("Edit category")
+                        checked: page.editingCategory
+                        enabled: page.canEditCategory() && !starlingClient.busy
+
+                        onCheckedChanged: {
+                            page.editingCategory = checked
+                            if (checked)
+                                page.selectedCategory = transactionData.category || "GENERAL"
+                        }
+                    }
+
+                    ComboBox {
+                        id: categoryCombo
+                        width: parent.width
+                        visible: page.editingCategory
+                        label: qsTr("Spending category")
+                        currentIndex: Math.max(0, page.categoryOptions.indexOf(page.selectedCategory))
+
+                        menu: ContextMenu {
+                            Repeater {
+                                model: page.categoryOptions
+
+                                delegate: MenuItem {
+                                    text: modelData
+                                }
+                            }
+                        }
+
+                        onCurrentIndexChanged: {
+                            if (currentIndex >= 0 && currentIndex < page.categoryOptions.length)
+                                page.selectedCategory = page.categoryOptions[currentIndex]
+                        }
+                    }
+
+                    Button {
+                        width: parent.width
+                        visible: page.editingCategory
+                        enabled: page.canEditCategory() && !starlingClient.busy
+                        text: starlingClient.busy ? qsTr("Saving...") : qsTr("Save category")
+                        onClicked: starlingClient.updateTransactionCategory(transactionData.feedItemUid,
+                                                                            page.selectedCategory)
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: !page.canEditCategory()
+                        text: qsTr("This transaction cannot be edited because its feed item ID is missing.")
+                        color: Theme.secondaryColor
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+                }
+            }
+
+            Rectangle {
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * x
                 height: noteColumn.height + 2 * Theme.paddingMedium
 
                 radius: Theme.paddingMedium
-                color: Theme.rgba(Theme.highlightBackgroundColor, 0.08)
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
                 border.width: 1
-                border.color: Theme.rgba(Theme.primaryColor, 0.10)
+                border.color: Theme.rgba(Theme.primaryColor, 0.15)
 
                 Column {
                     id: noteColumn
@@ -290,8 +397,7 @@ Page {
                         width: parent.width
                         text: qsTr("Note")
                         color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeMedium
-                        font.bold: true
+                        font.pixelSize: Theme.fontSizeSmall
                     }
 
                     Label {
@@ -364,6 +470,17 @@ Page {
                 noteField.text = note
                 page.editingNote = false
                 editNoteSwitch.checked = false
+            }
+        }
+
+        onTransactionCategoryUpdated: {
+            if (feedItemUid === transactionData.feedItemUid) {
+                var updated = transactionData
+                updated.category = category
+                transactionData = updated
+                page.selectedCategory = category
+                page.editingCategory = false
+                editCategorySwitch.checked = false
             }
         }
     }
