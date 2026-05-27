@@ -533,10 +533,9 @@ Page {
                 height: mastercardColumn.height + 2 * Theme.paddingMedium
 
                 visible: starlingClient.transactionMastercardDetails.feedItemUid === transactionData.feedItemUid
-                         && (starlingClient.transactionMastercardDetails.merchantName
-                             || starlingClient.transactionMastercardDetails.merchantCategory
-                             || starlingClient.transactionMastercardDetails.cardLastFour)
-
+                         && ((starlingClient.transactionMastercardDetails.merchantName || "").length > 0
+                             || (starlingClient.transactionMastercardDetails.merchantCategory || "").length > 0
+                             || (starlingClient.transactionMastercardDetails.cardLastFour || "").length > 0)
                 radius: Theme.paddingMedium
                 color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
                 border.width: 1
@@ -559,8 +558,7 @@ Page {
 
                     Label {
                         width: parent.width
-                        visible: starlingClient.transactionMastercardDetails.merchantName
-                                 && starlingClient.transactionMastercardDetails.merchantName.length > 0
+                        visible: (starlingClient.transactionMastercardDetails.merchantName || "").length > 0
                         text: qsTr("Merchant: %1").arg(starlingClient.transactionMastercardDetails.merchantName)
                         color: Theme.primaryColor
                         wrapMode: Text.Wrap
@@ -568,8 +566,7 @@ Page {
 
                     Label {
                         width: parent.width
-                        visible: starlingClient.transactionMastercardDetails.merchantCategory
-                                 && starlingClient.transactionMastercardDetails.merchantCategory.length > 0
+                        visible: (starlingClient.transactionMastercardDetails.merchantCategory || "").length > 0
                         text: qsTr("Category: %1").arg(starlingClient.transactionMastercardDetails.merchantCategory)
                         color: Theme.primaryColor
                         wrapMode: Text.Wrap
@@ -577,8 +574,7 @@ Page {
 
                     Label {
                         width: parent.width
-                        visible: starlingClient.transactionMastercardDetails.merchantCategoryCode
-                                 && starlingClient.transactionMastercardDetails.merchantCategoryCode.length > 0
+                        visible: (starlingClient.transactionMastercardDetails.merchantCategoryCode || "").length > 0
                         text: qsTr("Category code: %1").arg(starlingClient.transactionMastercardDetails.merchantCategoryCode)
                         color: Theme.secondaryColor
                         font.pixelSize: Theme.fontSizeSmall
@@ -587,8 +583,7 @@ Page {
 
                     Label {
                         width: parent.width
-                        visible: starlingClient.transactionMastercardDetails.merchantCity
-                                 || starlingClient.transactionMastercardDetails.merchantCountry
+                        visible: (starlingClient.transactionMastercardDetails.merchantCity || "").length > 0 || (starlingClient.transactionMastercardDetails.merchantCountry || "").length > 0
                         text: qsTr("Location: %1 %2")
                               .arg(starlingClient.transactionMastercardDetails.merchantCity || "")
                               .arg(starlingClient.transactionMastercardDetails.merchantCountry || "")
@@ -599,8 +594,7 @@ Page {
 
                     Label {
                         width: parent.width
-                        visible: starlingClient.transactionMastercardDetails.cardLastFour
-                                 && starlingClient.transactionMastercardDetails.cardLastFour.length > 0
+                        visible: (starlingClient.transactionMastercardDetails.cardLastFour || "").length > 0
                         text: qsTr("Card: **** %1").arg(starlingClient.transactionMastercardDetails.cardLastFour)
                         color: Theme.secondaryColor
                         font.pixelSize: Theme.fontSizeSmall
@@ -608,8 +602,7 @@ Page {
 
                     Label {
                         width: parent.width
-                        visible: starlingClient.transactionMastercardDetails.wallet
-                                 && starlingClient.transactionMastercardDetails.wallet.length > 0
+                        visible: (starlingClient.transactionMastercardDetails.wallet || "").length > 0
                         text: qsTr("Wallet: %1").arg(starlingClient.transactionMastercardDetails.wallet)
                         color: Theme.secondaryColor
                         font.pixelSize: Theme.fontSizeSmall
@@ -617,8 +610,7 @@ Page {
 
                     Label {
                         width: parent.width
-                        visible: starlingClient.transactionMastercardDetails.posEntryMode
-                                 && starlingClient.transactionMastercardDetails.posEntryMode.length > 0
+                        visible: (starlingClient.transactionMastercardDetails.posEntryMode || "").length > 0
                         text: qsTr("Entry mode: %1").arg(starlingClient.transactionMastercardDetails.posEntryMode)
                         color: Theme.secondaryColor
                         font.pixelSize: Theme.fontSizeSmall
