@@ -18,6 +18,7 @@
 */
 import QtQuick 2.0
 import Sailfish.Silica 1.0
+import Sailfish.Pickers 1.0
 import "../components"
 
 Page {
@@ -51,6 +52,38 @@ Page {
     ]
     property string selectedCategory: transactionData.category || "GENERAL"
     property int saveButtonWidth: Theme.itemSizeLarge
+    property bool uploadingAttachment: false
+    property string attachmentError: ""
+    property bool attachmentsRequested: false
+    property int selectedAttachmentIndex: 0
+
+    function selectedAttachment() {
+        if (starlingClient.transactionAttachments.length === 0)
+            return null
+
+        if (selectedAttachmentIndex < 0
+                || selectedAttachmentIndex >= starlingClient.transactionAttachments.length)
+            return starlingClient.transactionAttachments[0]
+
+        return starlingClient.transactionAttachments[selectedAttachmentIndex]
+    }
+
+    function attachmentDisplayName(attachment, idx) {
+        if (attachment && attachment.name && attachment.name.length > 0)
+            return attachment.name
+
+        return qsTr("Attachment %1").arg(idx + 1)
+    }
+
+    function allowedAttachmentPath(path) {
+        var p = (path || "").toString().toLowerCase()
+
+        return p.length >= 4
+                && (p.slice(-4) === ".jpg"
+                    || p.slice(-5) === ".jpeg"
+                    || p.slice(-4) === ".png"
+                    || p.slice(-4) === ".pdf")
+    }
 
     function canEditNote() {
         return transactionData.feedItemUid && transactionData.feedItemUid.length > 0
@@ -69,6 +102,7 @@ Page {
             starlingClient.refreshTransactionDetail(transactionData.feedItemUid)
 
         if (transactionData.feedItemUid && transactionData.feedItemUid.length > 0)
+            page.attachmentsRequested = true
             starlingClient.refreshTransactionAttachments(transactionData.feedItemUid)
 
         if (transactionData.feedItemUid && transactionData.feedItemUid.length > 0)
@@ -76,6 +110,10 @@ Page {
 
         if (transactionData.feedItemUid && transactionData.feedItemUid.length > 0)
             starlingClient.refreshTransactionMastercardDetails(transactionData.feedItemUid)
+    }
+
+    Component.onDestruction: {
+        starlingClient.clearLastAttachmentPath()
     }
 
     SilicaFlickable {
@@ -398,9 +436,89 @@ Page {
                         font.pixelSize: Theme.fontSizeMedium
                     }
 
+                    TextSwitch {
+                        id: uploadAttachmentSwitch
+                        width: parent.width
+                        text: qsTr("Upload attachment")
+                        checked: page.uploadingAttachment
+                        enabled: !starlingClient.busy
+
+                        onCheckedChanged: {
+                            page.uploadingAttachment = checked
+                            if (!checked) {
+                                page.attachmentError = ""
+                            }
+                        }
+                    }
+
                     Label {
                         width: parent.width
-                        visible: starlingClient.busy && starlingClient.transactionAttachments.length === 0
+                        visible: page.uploadingAttachment
+                        text: qsTr("Only images and PDF files can be uploaded.")
+                        color: Theme.secondaryColor
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+
+                    Button {
+                        width: parent.width
+                        visible: page.uploadingAttachment
+                        enabled: !starlingClient.busy
+                        text: qsTr("Choose file")
+                        onClicked: pageStack.push(attachmentFilePickerComponent)
+                    }
+
+                    TextField {
+                        id: attachmentPathField
+                        width: parent.width
+                        visible: page.uploadingAttachment
+                        label: qsTr("Attachment file path")
+                        placeholderText: qsTr("/home/defaultuser/Documents/receipt.jpg")
+                        enabled: !starlingClient.busy
+                        onTextChanged: page.attachmentError = ""
+                    }
+
+                    Button {
+                        width: parent.width
+                        visible: page.uploadingAttachment
+                        enabled: !starlingClient.busy
+                                 && transactionData.feedItemUid
+                                 && transactionData.feedItemUid.length > 0
+                                 && attachmentPathField.text.trim().length > 0
+                        text: qsTr("Upload")
+                        onClicked: {
+                            page.attachmentError = ""
+
+                            var path = attachmentPathField.text.trim()
+
+                            if (!page.allowedAttachmentPath(path)) {
+                                page.attachmentError = qsTr("Please choose an image or PDF file.")
+                                return
+                            }
+
+                            if (!starlingClient.localFileExists(path)) {
+                                page.attachmentError = qsTr("File not found.")
+                                return
+                            }
+
+                            starlingClient.uploadTransactionAttachment(transactionData.feedItemUid, path)
+                        }
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: page.attachmentError.length > 0
+                        text: page.attachmentError
+                        color: Theme.errorColor
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: page.attachmentsRequested
+                                 && starlingClient.busy
+                                 && starlingClient.transactionAttachments.length === 0
                         text: qsTr("Loading attachments...")
                         color: Theme.secondaryColor
                         wrapMode: Text.Wrap
@@ -409,80 +527,77 @@ Page {
 
                     Label {
                         width: parent.width
-                        visible: !starlingClient.busy && starlingClient.transactionAttachments.length === 0
+                        visible: page.attachmentsRequested
+                                 && !starlingClient.busy
+                                 && starlingClient.transactionAttachments.length === 0
                         text: qsTr("No attachments found.")
                         color: Theme.secondaryColor
                         wrapMode: Text.Wrap
                         font.pixelSize: Theme.fontSizeSmall
                     }
 
-                    TextField {
-                        id: attachmentPathField
+                    ComboBox {
+                        id: attachmentCombo
                         width: parent.width
-                        label: qsTr("Attachment file path")
-                        placeholderText: qsTr("/home/defaultuser/Documents/receipt.jpg")
-                        enabled: !starlingClient.busy
+                        visible: starlingClient.transactionAttachments.length > 0
+                        label: qsTr("Attachment")
+                        currentIndex: page.selectedAttachmentIndex
+
+                        menu: ContextMenu {
+                            Repeater {
+                                model: starlingClient.transactionAttachments
+
+                                delegate: MenuItem {
+                                    text: page.attachmentDisplayName(modelData, index)
+                                }
+                            }
+                        }
+
+                        onCurrentIndexChanged: {
+                            page.selectedAttachmentIndex = currentIndex
+                        }
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: page.selectedAttachment() !== null
+                                 && ((page.selectedAttachment().contentType || "").length > 0)
+                        text: page.selectedAttachment() !== null
+                              ? page.selectedAttachment().contentType
+                              : ""
+                        color: Theme.secondaryColor
+                        font.pixelSize: Theme.fontSizeSmall
+                        wrapMode: Text.Wrap
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: page.selectedAttachment() !== null
+                                 && ((page.selectedAttachment().createdAt || "").length > 0)
+                        text: page.selectedAttachment() !== null
+                              ? page.selectedAttachment().createdAt
+                              : ""
+                        color: Theme.secondaryColor
+                        font.pixelSize: Theme.fontSizeExtraSmall
+                        wrapMode: Text.Wrap
                     }
 
                     Button {
                         width: parent.width
+                        visible: starlingClient.transactionAttachments.length > 0
                         enabled: !starlingClient.busy
                                  && transactionData.feedItemUid
                                  && transactionData.feedItemUid.length > 0
-                                 && attachmentPathField.text.trim().length > 0
-                        text: qsTr("Upload attachment")
-                        onClicked: starlingClient.uploadTransactionAttachment(transactionData.feedItemUid,
-                                                                              attachmentPathField.text.trim())
-                    }
-
-                    Repeater {
-                        model: starlingClient.transactionAttachments
-
-                        Column {
-                            width: parent.width
-                            spacing: Theme.paddingSmall
-
-                            Label {
-                                width: parent.width
-                                text: modelData.name && modelData.name.length > 0
-                                      ? modelData.name
-                                      : qsTr("Attachment")
-                                color: Theme.primaryColor
-                                font.bold: true
-                                wrapMode: Text.Wrap
-                            }
-
-                            Label {
-                                width: parent.width
-                                visible: modelData.contentType && modelData.contentType.length > 0
-                                text: modelData.contentType
-                                color: Theme.secondaryColor
-                                font.pixelSize: Theme.fontSizeSmall
-                                wrapMode: Text.Wrap
-                            }
-
-                            Label {
-                                width: parent.width
-                                visible: modelData.createdAt && modelData.createdAt.length > 0
-                                text: modelData.createdAt
-                                color: Theme.secondaryColor
-                                font.pixelSize: Theme.fontSizeExtraSmall
-                                wrapMode: Text.Wrap
-                            }
-
-                            Button {
-                                width: parent.width
-                                enabled: !starlingClient.busy
-                                         && transactionData.feedItemUid
-                                         && transactionData.feedItemUid.length > 0
-                                         && modelData.feedItemAttachmentUid
-                                         && modelData.feedItemAttachmentUid.length > 0
-                                text: qsTr("Download")
-                                onClicked: starlingClient.downloadTransactionAttachment(
-                                               transactionData.feedItemUid,
-                                               modelData.feedItemAttachmentUid,
-                                               modelData.name || qsTr("starling-attachment"))
-                            }
+                                 && page.selectedAttachment()
+                                 && page.selectedAttachment().feedItemAttachmentUid
+                                 && page.selectedAttachment().feedItemAttachmentUid.length > 0
+                        text: qsTr("Download selected attachment")
+                        onClicked: {
+                            var attachment = page.selectedAttachment()
+                            starlingClient.downloadTransactionAttachment(
+                                        transactionData.feedItemUid,
+                                        attachment.feedItemAttachmentUid,
+                                        page.attachmentDisplayName(attachment, page.selectedAttachmentIndex))
                         }
                     }
 
@@ -842,6 +957,29 @@ Page {
         }
     }
 
+    Component {
+        id: attachmentFilePickerComponent
+
+        FilePickerPage {
+            title: qsTr("Select attachment")
+            nameFilters: [
+                "*.jpg",
+                "*.jpeg",
+                "*.png",
+                "*.pdf"
+            ]
+
+            onSelectedContentPropertiesChanged: {
+                if (selectedContentProperties && selectedContentProperties.filePath) {
+                    attachmentPathField.text = selectedContentProperties.filePath
+                    page.attachmentError = ""
+                    page.uploadingAttachment = true
+                    uploadAttachmentSwitch.checked = true
+                }
+            }
+        }
+    }
+
     Connections {
         target: starlingClient
 
@@ -865,6 +1003,19 @@ Page {
                 page.editingCategory = false
                 editCategorySwitch.checked = false
             }
+        }
+
+        onTransactionAttachmentUploaded: {
+            if (feedItemUid === transactionData.feedItemUid) {
+                page.uploadingAttachment = false
+                uploadAttachmentSwitch.checked = false
+                attachmentPathField.text = ""
+                page.attachmentError = ""
+            }
+        }
+
+        onTransactionAttachmentsChanged: {
+            page.selectedAttachmentIndex = 0
         }
     }
 

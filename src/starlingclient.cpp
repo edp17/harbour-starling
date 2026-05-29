@@ -71,10 +71,25 @@ StarlingClient::StarlingClient(QObject *parent)
     });
 }
 
+bool StarlingClient::localFileExists(const QString &filePath) const
+{
+    const QFileInfo info(filePath.trimmed());
+    return info.exists() && info.isFile();
+}
+
 // Transactions
 QString StarlingClient::lastAttachmentPath() const
 {
     return m_lastAttachmentPath;
+}
+
+void StarlingClient::clearLastAttachmentPath()
+{
+    if (m_lastAttachmentPath.isEmpty())
+        return;
+
+    m_lastAttachmentPath.clear();
+    emit lastAttachmentPathChanged();
 }
 
 void StarlingClient::uploadTransactionAttachment(const QString &feedItemUid,
@@ -119,13 +134,22 @@ void StarlingClient::uploadTransactionAttachment(const QString &feedItemUid,
 
     QMimeDatabase mimeDb;
     const QMimeType mime = mimeDb.mimeTypeForFile(info);
+    const QString mimeName = mime.isValid()
+            ? mime.name()
+            : QStringLiteral("application/octet-stream");
+
+    if (!(mimeName.startsWith(QStringLiteral("image/"))
+            || mimeName == QStringLiteral("application/pdf"))) {
+        file->deleteLater();
+        setStatus(QStringLiteral("Only images and PDF files can be uploaded."));
+        return;
+    }
 
     const QByteArray body = file->readAll();
     file->deleteLater();
 
-    req.setHeader(QNetworkRequest::ContentTypeHeader,
-                  QVariant(mime.isValid() ? mime.name()
-                                          : QStringLiteral("application/octet-stream")));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, QVariant(mimeName));
+
 
     setStatus(QStringLiteral("Uploading attachment..."));
     beginRequest();
@@ -149,6 +173,7 @@ void StarlingClient::uploadTransactionAttachment(const QString &feedItemUid,
 
         setStatus(QStringLiteral("Attachment uploaded."));
         refreshTransactionAttachments(trimmedFeedItemUid);
+        emit transactionAttachmentUploaded(trimmedFeedItemUid);
         touchLastUpdated();
 
         rep->deleteLater();
@@ -175,7 +200,7 @@ void StarlingClient::downloadTransactionAttachment(const QString &feedItemUid,
 
     QString safeName = name.trimmed();
     if (safeName.isEmpty())
-        safeName = QStringLiteral("starling-attachment");
+        safeName = QStringLiteral("attachment");
 
     safeName.replace(QStringLiteral("/"), QStringLiteral("_"));
     safeName.replace(QStringLiteral("\\"), QStringLiteral("_"));
@@ -197,7 +222,7 @@ void StarlingClient::downloadTransactionAttachment(const QString &feedItemUid,
 
     QNetworkReply *rep = m_nam.get(req);
 
-    connect(rep, &QNetworkReply::finished, this, [this, rep, safeName]() {
+    connect(rep, &QNetworkReply::finished, this, [this, rep, safeName, trimmedFeedItemUid, trimmedAttachmentUid]() {
         const QByteArray body = rep->readAll();
 
         if (rep->error() != QNetworkReply::NoError) {
@@ -222,7 +247,23 @@ void StarlingClient::downloadTransactionAttachment(const QString &feedItemUid,
             return;
         }
 
-        const QString filePath = dir.filePath(safeName);
+        QString finalName = QStringLiteral("%1-%2-%3")
+                .arg(trimmedFeedItemUid.left(8))
+                .arg(trimmedAttachmentUid.left(8))
+                .arg(safeName);
+
+        if (!finalName.contains(QLatin1Char('.'))) {
+            const QString contentType = rep->header(QNetworkRequest::ContentTypeHeader).toString();
+
+            if (contentType.contains(QStringLiteral("png")))
+                finalName += QStringLiteral(".png");
+            else if (contentType.contains(QStringLiteral("jpeg")) || contentType.contains(QStringLiteral("jpg")))
+                finalName += QStringLiteral(".jpg");
+            else if (contentType.contains(QStringLiteral("pdf")))
+                finalName += QStringLiteral(".pdf");
+        }
+
+        const QString filePath = dir.filePath(finalName);
 
         QFile file(filePath);
         if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {

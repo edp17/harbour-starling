@@ -306,6 +306,8 @@ public:
                                                    const QString &name);
     Q_INVOKABLE void uploadTransactionAttachment(const QString &feedItemUid,
                                                  const QString &filePath);
+    Q_INVOKABLE bool localFileExists(const QString &filePath) const;
+    Q_INVOKABLE void clearLastAttachmentPath();
 
 signals:
     void tokenChanged();
@@ -362,6 +364,7 @@ signals:
     void transactionReceiptsChanged();
     void transactionMastercardDetailsChanged();
     void lastAttachmentPathChanged();
+    void transactionAttachmentUploaded(const QString &feedItemUid);
 
 private:
     // helpers
