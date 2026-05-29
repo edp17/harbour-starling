@@ -304,6 +304,8 @@ public:
     Q_INVOKABLE void downloadTransactionAttachment(const QString &feedItemUid,
                                                    const QString &attachmentUid,
                                                    const QString &name);
+    Q_INVOKABLE void uploadTransactionAttachment(const QString &feedItemUid,
+                                                 const QString &filePath);
 
 signals:
     void tokenChanged();

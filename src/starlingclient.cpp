@@ -25,6 +25,9 @@
 #include <openssl/pem.h>
 #include <openssl/bio.h>
 #include <openssl/err.h>
+#include <QFileInfo>
+#include <QMimeDatabase>
+#include <QMimeType>
 
 static const char *BASE_URL = "https://api.starlingbank.com";
 
@@ -72,6 +75,85 @@ StarlingClient::StarlingClient(QObject *parent)
 QString StarlingClient::lastAttachmentPath() const
 {
     return m_lastAttachmentPath;
+}
+
+void StarlingClient::uploadTransactionAttachment(const QString &feedItemUid,
+                                                 const QString &filePath)
+{
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedFeedItemUid = feedItemUid.trimmed();
+    const QString trimmedFilePath = filePath.trimmed();
+
+    if (trimmedFeedItemUid.isEmpty()) {
+        setStatus(QStringLiteral("Transaction UID is missing."));
+        return;
+    }
+
+    QFileInfo info(trimmedFilePath);
+    if (!info.exists() || !info.isFile()) {
+        setStatus(QStringLiteral("Attachment file not found."));
+        return;
+    }
+
+    QFile *file = new QFile(info.absoluteFilePath(), this);
+    if (!file->open(QIODevice::ReadOnly)) {
+        file->deleteLater();
+        setStatus(QStringLiteral("Could not open attachment file."));
+        return;
+    }
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/category/%2/%3/attachments")
+            .arg(m_accountUid)
+            .arg(m_categoryUid)
+            .arg(trimmedFeedItemUid);
+
+    QUrl url(QString::fromLatin1(BASE_URL) + path);
+
+    QNetworkRequest req(url);
+    req.setRawHeader("Authorization", QByteArray("Bearer ") + m_token.toUtf8());
+
+    QMimeDatabase mimeDb;
+    const QMimeType mime = mimeDb.mimeTypeForFile(info);
+
+    const QByteArray body = file->readAll();
+    file->deleteLater();
+
+    req.setHeader(QNetworkRequest::ContentTypeHeader,
+                  QVariant(mime.isValid() ? mime.name()
+                                          : QStringLiteral("application/octet-stream")));
+
+    setStatus(QStringLiteral("Uploading attachment..."));
+    beginRequest();
+
+    QNetworkReply *rep = m_nam.post(req, body);
+
+    connect(rep, &QNetworkReply::finished, this, [this, rep, trimmedFeedItemUid]() {
+        const QByteArray body = rep->readAll();
+
+        if (rep->error() != QNetworkReply::NoError) {
+            qWarning() << "uploadTransactionAttachment failed url=" << rep->url()
+                       << "status=" << rep->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt()
+                       << "qtError=" << rep->errorString()
+                       << "body=" << QString::fromUtf8(body);
+
+            setStatus(QStringLiteral("Attachment upload failed: %1").arg(rep->errorString()));
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        setStatus(QStringLiteral("Attachment uploaded."));
+        refreshTransactionAttachments(trimmedFeedItemUid);
+        touchLastUpdated();
+
+        rep->deleteLater();
+        endRequest();
+    });
 }
 
 void StarlingClient::downloadTransactionAttachment(const QString &feedItemUid,

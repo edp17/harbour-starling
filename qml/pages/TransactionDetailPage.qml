@@ -416,6 +416,25 @@ Page {
                         font.pixelSize: Theme.fontSizeSmall
                     }
 
+                    TextField {
+                        id: attachmentPathField
+                        width: parent.width
+                        label: qsTr("Attachment file path")
+                        placeholderText: qsTr("/home/defaultuser/Documents/receipt.jpg")
+                        enabled: !starlingClient.busy
+                    }
+
+                    Button {
+                        width: parent.width
+                        enabled: !starlingClient.busy
+                                 && transactionData.feedItemUid
+                                 && transactionData.feedItemUid.length > 0
+                                 && attachmentPathField.text.trim().length > 0
+                        text: qsTr("Upload attachment")
+                        onClicked: starlingClient.uploadTransactionAttachment(transactionData.feedItemUid,
+                                                                              attachmentPathField.text.trim())
+                    }
+
                     Repeater {
                         model: starlingClient.transactionAttachments
 
