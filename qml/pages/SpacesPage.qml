@@ -42,6 +42,12 @@ Page {
                 text: qsTr("Create savings goal")
                 onClicked: pageStack.push(Qt.resolvedUrl("CreateSavingsGoalPage.qml"))
             }
+            MenuItem {
+                enabled: page.readyForContent
+                visible: page.readyForContent
+                text: qsTr("Round-up")
+                onClicked: pageStack.push(Qt.resolvedUrl("RoundUpPage.qml"))
+            }
         }
 
         Column {

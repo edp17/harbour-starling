@@ -801,6 +801,63 @@ void StarlingClient::deleteSavingsGoal(const QString &savingsGoalUid)
     });
 }
 
+// RoundUp
+QVariantMap StarlingClient::roundUp() const
+{
+    return m_roundUp;
+}
+
+void StarlingClient::refreshRoundUp()
+{
+    if (m_accountUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    m_roundUp.clear();
+    emit roundUpChanged();
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/round-up")
+            .arg(m_accountUid);
+
+    setStatus(QStringLiteral("Loading round-up status..."));
+
+    getJson(path, [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QVariantMap data;
+
+        const QString goalUid = root.value(QStringLiteral("roundUpGoalUid")).toString(
+                    root.value(QStringLiteral("savingsGoalUid")).toString());
+
+        const int multiplier = root.value(QStringLiteral("roundUpMultiplier")).toInt();
+
+        data.insert(QStringLiteral("active"), !goalUid.isEmpty());
+        data.insert(QStringLiteral("roundUpGoalUid"), goalUid);
+        data.insert(QStringLiteral("roundUpMultiplier"), multiplier > 0 ? multiplier : 1);
+
+        QString goalName;
+        for (int i = 0; i < m_spaces.size(); ++i) {
+            const QVariantMap space = m_spaces.at(i).toMap();
+
+            if (space.value(QStringLiteral("spaceUid")).toString() == goalUid) {
+                goalName = space.value(QStringLiteral("name")).toString();
+                break;
+            }
+        }
+
+        data.insert(QStringLiteral("goalName"), goalName);
+
+        m_roundUp = data;
+        emit roundUpChanged();
+
+        setStatus(QStringLiteral("Round-up status loaded."));
+        touchLastUpdated();
+    });
+}
+
 // Feed Extract Csv - Statements/transactions
 QString StarlingClient::lastFeedExportCsvPath() const
 {

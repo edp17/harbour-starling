@@ -76,6 +76,7 @@ class StarlingClient : public QObject
     Q_PROPERTY(QVariantList transactionReceipts READ transactionReceipts NOTIFY transactionReceiptsChanged)
     Q_PROPERTY(QVariantMap transactionMastercardDetails READ transactionMastercardDetails NOTIFY transactionMastercardDetailsChanged)
     Q_PROPERTY(QString lastAttachmentPath READ lastAttachmentPath NOTIFY lastAttachmentPathChanged)
+    Q_PROPERTY(QVariantMap roundUp READ roundUp NOTIFY roundUpChanged)
 
 public:
     explicit StarlingClient(QObject *parent = nullptr);
@@ -113,6 +114,7 @@ public:
     QVariantMap transactionDetail() const;
     QVariantMap payeeDetail() const;
     QVariantMap transactionMastercardDetails() const;
+    QVariantMap roundUp() const;
     QVariantList transactionRows() const;
     QVariantList recentTransactions() const;
     QVariantList sourceAccounts() const;
@@ -308,6 +310,7 @@ public:
                                                  const QString &filePath);
     Q_INVOKABLE bool localFileExists(const QString &filePath) const;
     Q_INVOKABLE void clearLastAttachmentPath();
+    Q_INVOKABLE void refreshRoundUp();
 
 signals:
     void tokenChanged();
@@ -365,6 +368,7 @@ signals:
     void transactionMastercardDetailsChanged();
     void lastAttachmentPathChanged();
     void transactionAttachmentUploaded(const QString &feedItemUid);
+    void roundUpChanged();
 
 private:
     // helpers
@@ -519,6 +523,7 @@ private:
     QVariantMap m_paymentDraft;
     QVariantMap m_transactionDetail;
     QVariantMap m_transactionMastercardDetails;
+    QVariantMap m_roundUp;
     TokenStore m_tokenStore;
     QByteArray buildDigestHeader(const QByteArray &body) const;
     QByteArray signWithRsaSha512(const QByteArray &content,
