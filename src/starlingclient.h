@@ -78,6 +78,7 @@ class StarlingClient : public QObject
     Q_PROPERTY(QString lastAttachmentPath READ lastAttachmentPath NOTIFY lastAttachmentPathChanged)
     Q_PROPERTY(QVariantMap roundUp READ roundUp NOTIFY roundUpChanged)
     Q_PROPERTY(bool roundUpLoaded READ roundUpLoaded NOTIFY roundUpChanged)
+    Q_PROPERTY(QVariantMap accountHolderBasic READ accountHolderBasic NOTIFY accountHolderBasicChanged)
 
 public:
     explicit StarlingClient(QObject *parent = nullptr);
@@ -116,6 +117,7 @@ public:
     QVariantMap payeeDetail() const;
     QVariantMap transactionMastercardDetails() const;
     QVariantMap roundUp() const;
+    QVariantMap accountHolderBasic() const;
     QVariantList transactionRows() const;
     QVariantList recentTransactions() const;
     QVariantList sourceAccounts() const;
@@ -315,6 +317,7 @@ public:
     Q_INVOKABLE void refreshRoundUp();
     Q_INVOKABLE void enableRoundUp(const QString &roundUpGoalUid, int multiplier);
     Q_INVOKABLE void disableRoundUp();
+    Q_INVOKABLE void refreshAccountHolderBasic();
 
 signals:
     void tokenChanged();
@@ -374,6 +377,7 @@ signals:
     void transactionAttachmentUploaded(const QString &feedItemUid);
     void roundUpChanged();
     void roundUpUpdated();
+    void accountHolderBasicChanged();
 
 private:
     // helpers
@@ -530,6 +534,7 @@ private:
     QVariantMap m_transactionDetail;
     QVariantMap m_transactionMastercardDetails;
     QVariantMap m_roundUp;
+    QVariantMap m_accountHolderBasic;
     TokenStore m_tokenStore;
     QByteArray buildDigestHeader(const QByteArray &body) const;
     QByteArray signWithRsaSha512(const QByteArray &content,

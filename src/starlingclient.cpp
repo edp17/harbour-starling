@@ -77,6 +77,37 @@ bool StarlingClient::localFileExists(const QString &filePath) const
     return info.exists() && info.isFile();
 }
 
+// Account holder
+QVariantMap StarlingClient::accountHolderBasic() const
+{
+    return m_accountHolderBasic;
+}
+
+void StarlingClient::refreshAccountHolderBasic()
+{
+    setStatus(QStringLiteral("Loading account holder details..."));
+
+    getJson(QStringLiteral("/api/v2/account-holder"),
+            [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QVariantMap data;
+        data.insert(QStringLiteral("accountHolderUid"),
+                    root.value(QStringLiteral("accountHolderUid")).toString());
+        data.insert(QStringLiteral("accountHolderType"),
+                    root.value(QStringLiteral("accountHolderType")).toString());
+        data.insert(QStringLiteral("accountHolderState"),
+                    root.value(QStringLiteral("accountHolderState")).toString());
+
+        m_accountHolderBasic = data;
+        emit accountHolderBasicChanged();
+
+        touchLastUpdated();
+        setStatus(QStringLiteral("Account holder details loaded."));
+    });
+}
+
 // Transactions
 QString StarlingClient::lastAttachmentPath() const
 {

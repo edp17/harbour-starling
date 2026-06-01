@@ -29,6 +29,11 @@ Page {
 
     property bool isOnline: starlingClient.online
 
+    Component.onCompleted: {
+        if (!starlingClient.locked && starlingClient.token.length > 0)
+            starlingClient.refreshAccountHolderBasic()
+    }
+
     SilicaFlickable {
         anchors.fill: parent
         contentHeight: contentColumn.height + Theme.paddingLarge
@@ -135,6 +140,46 @@ Page {
                         Label {
                             width: parent.width
                             text: starlingClient.accountHolderName
+                            color: Theme.primaryColor
+                            wrapMode: Text.Wrap
+                        }
+                    }
+
+                    Column {
+                        width: parent.width
+                        spacing: Theme.paddingSmall / 2
+                        visible: hasText(starlingClient.accountHolderBasic.accountHolderState || "")
+
+                        Label {
+                            width: parent.width
+                            text: qsTr("Account state")
+                            color: Theme.secondaryHighlightColor
+                            font.pixelSize: Theme.fontSizeExtraSmall
+                        }
+
+                        Label {
+                            width: parent.width
+                            text: starlingClient.accountHolderBasic.accountHolderState || ""
+                            color: Theme.primaryColor
+                            wrapMode: Text.Wrap
+                        }
+                    }
+
+                    Column {
+                        width: parent.width
+                        spacing: Theme.paddingSmall / 2
+                        visible: hasText(starlingClient.accountHolderBasic.accountHolderType || "")
+
+                        Label {
+                            width: parent.width
+                            text: qsTr("Account type")
+                            color: Theme.secondaryHighlightColor
+                            font.pixelSize: Theme.fontSizeExtraSmall
+                        }
+
+                        Label {
+                            width: parent.width
+                            text: starlingClient.accountHolderBasic.accountHolderType || ""
                             color: Theme.primaryColor
                             wrapMode: Text.Wrap
                         }
