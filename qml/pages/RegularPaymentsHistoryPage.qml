@@ -25,10 +25,10 @@ Page {
 
     property bool readyForContent: !starlingClient.locked && starlingClient.token.length > 0
 
-    function activeRows(rows) {
+    function inactiveRows(rows) {
         var out = []
         for (var i = 0; i < rows.length; ++i) {
-            if (rows[i].isActive === true)
+            if (rows[i].isActive !== true)
                 out.push(rows[i])
         }
         return out
@@ -45,12 +45,6 @@ Page {
                 text: qsTr("Refresh")
                 onClicked: starlingClient.refreshRegularPayments()
             }
-            MenuItem {
-                enabled: page.readyForContent
-                visible: page.readyForContent
-                text: qsTr("Payment history")
-                onClicked: pageStack.push(Qt.resolvedUrl("RegularPaymentsHistoryPage.qml"))
-            }
         }
 
         Column {
@@ -59,25 +53,7 @@ Page {
             spacing: Theme.paddingMedium
 
             PageHeader {
-                title: qsTr("Regular payments")
-            }
-
-            Label {
-                x: Theme.horizontalPageMargin
-                width: parent.width - 2 * x
-                visible: starlingClient.locked
-                text: qsTr("Unlock the app to view regular payments.")
-                color: Theme.secondaryColor
-                wrapMode: Text.Wrap
-            }
-
-            Label {
-                x: Theme.horizontalPageMargin
-                width: parent.width - 2 * x
-                visible: !starlingClient.locked && starlingClient.token.length === 0
-                text: qsTr("Open Settings to add your Starling Personal Access Token.")
-                color: Theme.secondaryColor
-                wrapMode: Text.Wrap
+                title: qsTr("Regular payment history")
             }
 
             SectionHeader {
@@ -89,34 +65,25 @@ Page {
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * x
                 visible: page.readyForContent
-                         && page.activeRows(starlingClient.directDebitMandates).length === 0
+                         && page.inactiveRows(starlingClient.directDebitMandates).length === 0
                 text: !starlingClient.regularPaymentsLoaded
                       ? qsTr("Loading Direct Debits...")
-                      : qsTr("No Direct Debits found.")
+                      : qsTr("No cancelled Direct Debits found.")
                 color: Theme.secondaryColor
                 wrapMode: Text.Wrap
             }
 
             Repeater {
-                model: page.readyForContent ? page.activeRows(starlingClient.directDebitMandates) : []
+                model: page.readyForContent ? page.inactiveRows(starlingClient.directDebitMandates) : []
 
                 Rectangle {
                     x: Theme.horizontalPageMargin
                     width: parent.width - 2 * x
                     height: ddColumn.height + 2 * Theme.paddingMedium
-
                     radius: Theme.paddingMedium
-                    color: Theme.rgba(Theme.highlightBackgroundColor, 0.12)
+                    color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
                     border.width: 1
-                    border.color: Theme.rgba(Theme.primaryColor, 0.12)
-
-                    Image {
-                        anchors.right: parent.right
-                        anchors.rightMargin: Theme.paddingMedium
-                        anchors.verticalCenter: parent.verticalCenter
-                        source: "image://theme/icon-m-right"
-                        opacity: 0.65
-                    }
+                    border.color: Theme.rgba(Theme.primaryColor, 0.15)
 
                     Column {
                         id: ddColumn
@@ -136,18 +103,26 @@ Page {
 
                         Label {
                             width: parent.width
+                            text: qsTr("Status: %1").arg(modelData.displayStatus || modelData.status || "-")
+                            color: Theme.secondaryColor
+                            font.pixelSize: Theme.fontSizeSmall
+                        }
+
+                        Label {
+                            width: parent.width
                             text: qsTr("Reference: %1").arg(modelData.reference || "-")
                             color: Theme.secondaryColor
                             font.pixelSize: Theme.fontSizeSmall
                             wrapMode: Text.Wrap
                         }
+                    }
 
-                        Label {
-                            width: parent.width
-                            text: qsTr("Status: %1").arg(modelData.status || "-")
-                            color: modelData.status === "ACTIVE" ? Theme.highlightColor : Theme.secondaryColor
-                            font.pixelSize: Theme.fontSizeSmall
-                        }
+                    Image {
+                        anchors.right: parent.right
+                        anchors.rightMargin: Theme.paddingMedium
+                        anchors.verticalCenter: parent.verticalCenter
+                        source: "image://theme/icon-m-right"
+                        opacity: 0.65
                     }
 
                     MouseArea {
@@ -169,34 +144,25 @@ Page {
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * x
                 visible: page.readyForContent
-                         && page.activeRows(starlingClient.standingOrders).length === 0
+                         && page.inactiveRows(starlingClient.standingOrders).length === 0
                 text: !starlingClient.regularPaymentsLoaded
                       ? qsTr("Loading Standing Orders...")
-                      : qsTr("No Standing Orders found.")
+                      : qsTr("No cancelled or completed Standing Orders found.")
                 color: Theme.secondaryColor
                 wrapMode: Text.Wrap
             }
 
             Repeater {
-                model: page.readyForContent ? page.activeRows(starlingClient.standingOrders) : []
+                model: page.readyForContent ? page.inactiveRows(starlingClient.standingOrders) : []
 
                 Rectangle {
                     x: Theme.horizontalPageMargin
                     width: parent.width - 2 * x
                     height: soColumn.height + 2 * Theme.paddingMedium
-
                     radius: Theme.paddingMedium
-                    color: Theme.rgba(Theme.highlightBackgroundColor, 0.12)
+                    color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
                     border.width: 1
-                    border.color: Theme.rgba(Theme.primaryColor, 0.12)
-
-                    Image {
-                        anchors.right: parent.right
-                        anchors.rightMargin: Theme.paddingMedium
-                        anchors.verticalCenter: parent.verticalCenter
-                        source: "image://theme/icon-m-right"
-                        opacity: 0.65
-                    }
+                    border.color: Theme.rgba(Theme.primaryColor, 0.15)
 
                     Column {
                         id: soColumn
@@ -205,26 +171,27 @@ Page {
                         width: parent.width - 3 * Theme.paddingMedium - Theme.iconSizeMedium
                         spacing: Theme.paddingSmall
 
-                        Row {
+                        Label {
                             width: parent.width
-                            spacing: Theme.paddingMedium
+                            text: modelData.title || qsTr("Standing Order")
+                            color: Theme.primaryColor
+                            font.pixelSize: Theme.fontSizeMedium
+                            font.bold: true
+                            truncationMode: TruncationMode.Fade
+                        }
 
-                            Label {
-                                width: parent.width - amountLabel.width - Theme.paddingMedium
-                                text: modelData.title || qsTr("Standing Order")
-                                color: Theme.primaryColor
-                                font.pixelSize: Theme.fontSizeMedium
-                                font.bold: true
-                                truncationMode: TruncationMode.Fade
-                            }
+                        Label {
+                            width: parent.width
+                            text: modelData.amount || "-"
+                            color: Theme.highlightColor
+                            font.bold: true
+                        }
 
-                            Label {
-                                id: amountLabel
-                                text: modelData.amount || "-"
-                                color: Theme.highlightColor
-                                font.bold: true
-                                horizontalAlignment: Text.AlignRight
-                            }
+                        Label {
+                            width: parent.width
+                            text: qsTr("Status: %1").arg(modelData.displayStatus || modelData.status || "-")
+                            color: modelData.displayStatus === "Completed" ? Theme.highlightColor : Theme.secondaryColor
+                            font.pixelSize: Theme.fontSizeSmall
                         }
 
                         Label {
@@ -234,20 +201,14 @@ Page {
                             font.pixelSize: Theme.fontSizeSmall
                             wrapMode: Text.Wrap
                         }
+                    }
 
-                        Label {
-                            width: parent.width
-                            text: qsTr("Next payment: %1").arg(modelData.nextDate || "-")
-                            color: Theme.secondaryColor
-                            font.pixelSize: Theme.fontSizeSmall
-                        }
-
-                        Label {
-                            width: parent.width
-                            text: qsTr("Status: %1").arg(modelData.status || "-")
-                            color: modelData.status === "ACTIVE" ? Theme.highlightColor : Theme.secondaryColor
-                            font.pixelSize: Theme.fontSizeSmall
-                        }
+                    Image {
+                        anchors.right: parent.right
+                        anchors.rightMargin: Theme.paddingMedium
+                        anchors.verticalCenter: parent.verticalCenter
+                        source: "image://theme/icon-m-right"
+                        opacity: 0.65
                     }
 
                     MouseArea {
@@ -258,16 +219,6 @@ Page {
                         })
                     }
                 }
-            }
-
-            Label {
-                x: Theme.horizontalPageMargin
-                width: parent.width - 2 * x
-                visible: !starlingClient.locked && starlingClient.status.length > 0
-                text: starlingClient.status
-                color: Theme.secondaryColor
-                font.pixelSize: Theme.fontSizeExtraSmall
-                wrapMode: Text.Wrap
             }
         }
 
@@ -283,7 +234,7 @@ Page {
         anchors.fill: parent
         visible: starlingClient.locked
         title: qsTr("App locked")
-        message: qsTr("Authenticate to view regular payments.")
+        message: qsTr("Authenticate to view regular payment history.")
         busy: starlingClient.busy
         z: 998
         onUnlockRequested: starlingClient.unlock()

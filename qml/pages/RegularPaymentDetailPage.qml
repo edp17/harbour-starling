@@ -27,8 +27,8 @@ Page {
     property var payment: ({})
     property bool isDirectDebit: paymentType === "directDebit"
     property bool isStandingOrder: paymentType === "standingOrder"
-
     property var standingOrderPayeeDetail: starlingClient.payeeDetail
+    property bool showPaymentHistory: false
 
     function requirePinThen(action) {
         pinActionRunner.pendingAction = action
@@ -132,8 +132,11 @@ Page {
         if (page.isStandingOrder && page.payment.paymentOrderUid && page.payment.paymentOrderUid.length > 0)
             starlingClient.refreshStandingOrderPaymentHistory(page.payment.paymentOrderUid)
 
-        if (page.isDirectDebit && page.payment.mandateUid && page.payment.mandateUid.length > 0)
+        if (page.isDirectDebit
+                && page.payment.mandateUid
+                && page.payment.mandateUid.length > 0) {
             starlingClient.refreshDirectDebitPayments(page.payment.mandateUid)
+        }
     }
 
     SilicaFlickable {
@@ -202,9 +205,7 @@ Page {
                 title: page.isDirectDebit ? qsTr("Mandate") : qsTr("Paying to")
                 fields: page.isDirectDebit ? [
                     page.field(qsTr("Source"), page.payment.source),
-                    page.field(qsTr("Originator"), page.payment.originatorName),
-                    page.field(qsTr("Originator UID"), page.payment.originatorUid),
-                    page.field(qsTr("Merchant UID"), page.payment.merchantUid)
+                    page.field(qsTr("Originator"), page.payment.originatorName)
                 ] : [
                     page.fieldOrLoading(qsTr("Name"), page.standingOrderPayeeName()),
                     page.fieldOrLoading(qsTr("Account number"), page.standingOrderAccount() ? page.standingOrderAccount().accountIdentifier : ""),
@@ -270,20 +271,83 @@ Page {
                 }
             }
 
-            RegularPaymentDetailSection {
-                visible: page.isStandingOrder
-                title: qsTr("Payment history")
-                fields: starlingClient.standingOrderPaymentHistory.length === 0
-                        ? [
-                            starlingClient.busy
-                                ? qsTr("Loading payment history...")
-                                : qsTr("No payment history found.")
-                          ]
-                        : []
+
+            Rectangle {
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * x
+                height: historyColumn.height + 2 * Theme.paddingMedium
+
+                radius: Theme.paddingMedium
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
+                border.width: 1
+                border.color: Theme.rgba(Theme.primaryColor, 0.15)
+
+                Column {
+                    id: historyColumn
+                    x: Theme.paddingMedium
+                    y: Theme.paddingMedium
+                    width: parent.width - 2 * Theme.paddingMedium
+                    spacing: Theme.paddingSmall
+
+                    Label {
+                        width: parent.width
+                        text: qsTr("Payment history")
+                        color: Theme.highlightColor
+                        font.pixelSize: Theme.fontSizeMedium
+                    }
+
+                    Label {
+                        width: parent.width
+                        text: page.isStandingOrder
+                              ? qsTr("Show previous payments made by this Standing Order.")
+                              : qsTr("Show previous Direct Debit payments.")
+                        color: Theme.secondaryColor
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+
+                    TextSwitch {
+                        width: parent.width
+                        text: qsTr("Show payment history")
+                        checked: page.showPaymentHistory
+
+                        onCheckedChanged: {
+                            page.showPaymentHistory = checked
+                        }
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: page.showPaymentHistory
+                                 && page.isStandingOrder
+                                 && starlingClient.standingOrderPaymentHistory.length === 0
+                        text: starlingClient.busy
+                              ? qsTr("Loading payment history...")
+                              : qsTr("No payment history found.")
+                        color: Theme.secondaryColor
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: page.showPaymentHistory
+                                 && page.isDirectDebit
+                                 && starlingClient.directDebitPayments.length === 0
+                        text: starlingClient.busy
+                              ? qsTr("Loading Direct Debit payments...")
+                              : qsTr("No Direct Debit payments found.")
+                        color: Theme.secondaryColor
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+                }
             }
 
             Repeater {
-                model: page.isStandingOrder ? starlingClient.standingOrderPaymentHistory : []
+                model: page.showPaymentHistory && page.isStandingOrder
+                       ? starlingClient.standingOrderPaymentHistory
+                       : []
 
                 RegularPaymentDetailSection {
                     fields: [
@@ -302,7 +366,7 @@ Page {
             }
 
             RegularPaymentDetailSection {
-                visible: page.isDirectDebit
+                visible: page.showPaymentHistory && page.isDirectDebit
                 title: qsTr("Payment history")
                 fields: starlingClient.directDebitPayments.length === 0
                         ? [
@@ -314,7 +378,9 @@ Page {
             }
 
             Repeater {
-                model: page.isDirectDebit ? starlingClient.directDebitPayments : []
+                model: page.showPaymentHistory && page.isDirectDebit
+                       ? starlingClient.directDebitPayments
+                       : []
 
                 RegularPaymentDetailSection {
                     fields: [

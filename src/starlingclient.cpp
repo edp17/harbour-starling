@@ -1172,6 +1172,8 @@ void StarlingClient::refreshStandingOrderPaymentHistory(const QString &paymentOr
 
 void StarlingClient::refreshRegularPayments()
 {
+    setStatus(QStringLiteral("Loading regular payments..."));
+
     m_directDebitMandatesLoaded = false;
     m_standingOrdersLoaded = false;
     emit regularPaymentsLoadedChanged();
@@ -1266,6 +1268,13 @@ void StarlingClient::refreshDirectDebitMandates()
             row.insert(QStringLiteral("mandateUid"), uid);
             row.insert(QStringLiteral("reference"), item.value(QStringLiteral("reference")).toString());
             row.insert(QStringLiteral("status"), item.value(QStringLiteral("status")).toString());
+            const QString ddStatus = row.value(QStringLiteral("status")).toString();
+            const bool ddActive = ddStatus == QStringLiteral("LIVE")
+                    || ddStatus == QStringLiteral("PENDING_CAS");
+
+            row.insert(QStringLiteral("displayStatus"),
+                       ddActive ? QStringLiteral("Active") : QStringLiteral("Cancelled"));
+            row.insert(QStringLiteral("isActive"), ddActive);
             row.insert(QStringLiteral("source"), item.value(QStringLiteral("source")).toString());
             row.insert(QStringLiteral("created"), formatIsoDateTime(item.value(QStringLiteral("created")).toString()));
             row.insert(QStringLiteral("cancelled"), formatIsoDateTime(item.value(QStringLiteral("cancelled")).toString()));
@@ -1360,9 +1369,24 @@ void StarlingClient::refreshStandingOrders()
             row.insert(QStringLiteral("untilDate"), recurrence.value(QStringLiteral("untilDate")).toString());
 
             const QString cancelledAt = row.value(QStringLiteral("cancelledAt")).toString();
-            row.insert(QStringLiteral("status"), cancelledAt.isEmpty()
-                       ? QStringLiteral("ACTIVE")
-                       : QStringLiteral("CANCELLED"));
+            const QString nextDate = row.value(QStringLiteral("nextDate")).toString();
+            const QString count = row.value(QStringLiteral("count")).toString();
+
+            const bool cancelled = !cancelledAt.isEmpty();
+            const bool completed = !cancelled && !count.isEmpty() && nextDate.isEmpty();
+
+            QString displayStatus;
+            if (cancelled)
+                displayStatus = QStringLiteral("Cancelled");
+            else if (completed)
+                displayStatus = QStringLiteral("Completed");
+            else
+                displayStatus = QStringLiteral("Active");
+
+            row.insert(QStringLiteral("status"), displayStatus.toUpper());
+            row.insert(QStringLiteral("displayStatus"), displayStatus);
+            row.insert(QStringLiteral("isActive"), displayStatus == QStringLiteral("Active"));
+            row.insert(QStringLiteral("isCompleted"), completed);
 
             QString title = row.value(QStringLiteral("reference")).toString();
             if (title.isEmpty())
