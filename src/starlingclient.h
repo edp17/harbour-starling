@@ -79,6 +79,7 @@ class StarlingClient : public QObject
     Q_PROPERTY(QVariantMap roundUp READ roundUp NOTIFY roundUpChanged)
     Q_PROPERTY(bool roundUpLoaded READ roundUpLoaded NOTIFY roundUpChanged)
     Q_PROPERTY(QVariantMap accountHolderBasic READ accountHolderBasic NOTIFY accountHolderBasicChanged)
+    Q_PROPERTY(QVariantMap currentAddress READ currentAddress NOTIFY accountChanged)
 
 public:
     explicit StarlingClient(QObject *parent = nullptr);
@@ -118,6 +119,7 @@ public:
     QVariantMap transactionMastercardDetails() const;
     QVariantMap roundUp() const;
     QVariantMap accountHolderBasic() const;
+    QVariantMap currentAddress() const;
     QVariantList transactionRows() const;
     QVariantList recentTransactions() const;
     QVariantList sourceAccounts() const;
@@ -545,6 +547,7 @@ private:
     QVariantMap m_transactionMastercardDetails;
     QVariantMap m_roundUp;
     QVariantMap m_accountHolderBasic;
+    QVariantMap m_currentAddress;
     TokenStore m_tokenStore;
     QByteArray buildDigestHeader(const QByteArray &body) const;
     QByteArray signWithRsaSha512(const QByteArray &content,

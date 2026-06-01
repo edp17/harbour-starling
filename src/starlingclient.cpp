@@ -78,6 +78,11 @@ bool StarlingClient::localFileExists(const QString &filePath) const
 }
 
 // Address
+QVariantMap StarlingClient::currentAddress() const
+{
+    return m_currentAddress;
+}
+
 void StarlingClient::updateAccountHolderAddress(const QString &line1,
                                                 const QString &line2,
                                                 const QString &line3,
@@ -4361,6 +4366,17 @@ void StarlingClient::refreshCards()
 
                 m_countryCode = cc;
                 m_postalAddress = buildPostalAddress(line1, line2, line3, postTown, postCode, cc);
+
+                m_currentAddress.clear();
+                m_currentAddress.insert(QStringLiteral("line1"), line1);
+                m_currentAddress.insert(QStringLiteral("line2"), line2);
+                m_currentAddress.insert(QStringLiteral("line3"), line3);
+                m_currentAddress.insert(QStringLiteral("postTown"), postTown);
+                m_currentAddress.insert(QStringLiteral("postCode"), postCode);
+                m_currentAddress.insert(QStringLiteral("countryCode"), cc);
+                m_currentAddress.insert(QStringLiteral("from"), current.value(QStringLiteral("from")).toString());
+                m_currentAddress.insert(QStringLiteral("udprn"), current.value(QStringLiteral("udprn")).toString());
+                m_currentAddress.insert(QStringLiteral("umprn"), current.value(QStringLiteral("umprn")).toString());
 
                 emit accountChanged();
             });

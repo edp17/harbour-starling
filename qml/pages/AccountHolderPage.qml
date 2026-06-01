@@ -30,6 +30,16 @@ Page {
     property bool editingAddress: false
     property string addressUpdateMessage: ""
 
+    function prefillAddressFields() {
+        addressLine1Field.text = starlingClient.currentAddress.line1 || ""
+        addressLine2Field.text = starlingClient.currentAddress.line2 || ""
+        addressLine3Field.text = starlingClient.currentAddress.line3 || ""
+        postTownField.text = starlingClient.currentAddress.postTown || ""
+        postCodeField.text = starlingClient.currentAddress.postCode || ""
+        countryCodeField.text = starlingClient.currentAddress.countryCode || "GB"
+        fromDateField.text = starlingClient.currentAddress.from || ""
+    }
+
     function saveAddress() {
         page.pageError = ""
 
@@ -386,7 +396,7 @@ Page {
                     Column {
                         width: parent.width
                         spacing: Theme.paddingSmall / 2
-                        visible: hasText(starlingClient.postalAddress)
+                        visible: hasText(starlingClient.postalAddress) || page.editingAddress
 
                         Label {
                             width: parent.width
@@ -397,40 +407,110 @@ Page {
 
                         Label {
                             width: parent.width
-                            text: starlingClient.postalAddress
+                            visible: !page.editingAddress
+                            text: starlingClient.postalAddress || ""
                             color: Theme.primaryColor
                             wrapMode: Text.Wrap
                         }
-                    }
 
-                    Rectangle {
-                        x: Theme.horizontalPageMargin
-                        width: parent.width - 2 * x
-                        height: addressEditColumn.height + 2 * Theme.paddingMedium
+                        TextField {
+                            id: addressLine1Field
+                            width: parent.width
+                            visible: page.editingAddress
+                            label: qsTr("Address line 1")
+                            enabled: !starlingClient.busy
+                            onTextChanged: page.pageError = ""
+                        }
 
-                        radius: Theme.paddingMedium
-                        color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
-                        border.width: 1
-                        border.color: Theme.rgba(Theme.primaryColor, 0.15)
+                        TextField {
+                            id: addressLine2Field
+                            width: parent.width
+                            visible: page.editingAddress
+                            label: qsTr("Address line 2")
+                            enabled: !starlingClient.busy
+                            onTextChanged: page.pageError = ""
+                        }
 
-                        Column {
-                            id: addressEditColumn
-                            x: Theme.paddingMedium
-                            y: Theme.paddingMedium
-                            width: parent.width - 2 * Theme.paddingMedium
-                            spacing: Theme.paddingMedium
+                        TextField {
+                            id: addressLine3Field
+                            width: parent.width
+                            visible: page.editingAddress
+                            label: qsTr("Address line 3")
+                            enabled: !starlingClient.busy
+                            onTextChanged: page.pageError = ""
+                        }
 
-                            Label {
-                                width: parent.width
-                                text: qsTr("Update address")
-                                color: Theme.highlightColor
-                                font.pixelSize: Theme.fontSizeMedium
-                                font.bold: true
+                        TextField {
+                            id: postTownField
+                            width: parent.width
+                            visible: page.editingAddress
+                            label: qsTr("Town/city")
+                            enabled: !starlingClient.busy
+                            onTextChanged: page.pageError = ""
+                        }
+
+                        TextField {
+                            id: postCodeField
+                            width: parent.width
+                            visible: page.editingAddress
+                            label: qsTr("Postcode")
+                            enabled: !starlingClient.busy
+                            onTextChanged: page.pageError = ""
+                        }
+
+                        TextField {
+                            id: countryCodeField
+                            width: parent.width
+                            visible: page.editingAddress
+                            label: qsTr("Country code")
+                            placeholderText: qsTr("GB")
+                            enabled: !starlingClient.busy
+                            onTextChanged: page.pageError = ""
+                        }
+
+                        TextField {
+                            id: fromDateField
+                            width: parent.width
+                            visible: page.editingAddress
+                            label: qsTr("Moved in on")
+                            placeholderText: qsTr("YYYY-MM-DD")
+                            enabled: !starlingClient.busy
+                            inputMethodHints: Qt.ImhDigitsOnly
+
+                            property bool formatting: false
+
+                            onTextChanged: {
+                                page.pageError = ""
+
+                                if (formatting)
+                                    return
+
+                                formatting = true
+
+                                var digits = text.replace(/[^0-9]/g, "")
+                                if (digits.length > 8)
+                                    digits = digits.substring(0, 8)
+
+                                var formatted = digits
+                                if (digits.length > 4)
+                                    formatted = digits.substring(0, 4) + "-" + digits.substring(4)
+                                if (digits.length > 6)
+                                    formatted = digits.substring(0, 4) + "-" + digits.substring(4, 6) + "-" + digits.substring(6)
+
+                                text = formatted
+                                cursorPosition = text.length
+
+                                formatting = false
                             }
+                        }
+
+                        Row {
+                            width: parent.width
+                            spacing: Theme.paddingSmall
 
                             TextSwitch {
                                 id: editAddressSwitch
-                                width: parent.width
+                                width: parent.width - Theme.itemSizeLarge - Theme.paddingSmall
                                 text: qsTr("Edit address")
                                 checked: page.editingAddress
                                 enabled: page.canEditEmail() && !starlingClient.busy
@@ -438,93 +518,21 @@ Page {
                                 onCheckedChanged: {
                                     page.editingAddress = checked
 
-                                    if (checked && fromDateField.text.length === 0)
-                                        fromDateField.text = page.todayIsoDate()
+                                    if (checked) {
+                                        page.prefillAddressFields()
+
+                                        if (fromDateField.text.length === 0)
+                                            fromDateField.text = page.todayIsoDate()
+                                    }
                                 }
                             }
 
-                            TextField {
-                                id: addressLine1Field
-                                width: parent.width
-                                visible: page.editingAddress
-                                label: qsTr("Address line 1")
-                                enabled: !starlingClient.busy
-                                onTextChanged: page.pageError = ""
-                            }
-
-                            TextField {
-                                id: addressLine2Field
-                                width: parent.width
-                                visible: page.editingAddress
-                                label: qsTr("Address line 2")
-                                enabled: !starlingClient.busy
-                                onTextChanged: page.pageError = ""
-                            }
-
-                            TextField {
-                                id: addressLine3Field
-                                width: parent.width
-                                visible: page.editingAddress
-                                label: qsTr("Address line 3")
-                                enabled: !starlingClient.busy
-                                onTextChanged: page.pageError = ""
-                            }
-
-                            TextField {
-                                id: postTownField
-                                width: parent.width
-                                visible: page.editingAddress
-                                label: qsTr("Town/city")
-                                enabled: !starlingClient.busy
-                                onTextChanged: page.pageError = ""
-                            }
-
-                            TextField {
-                                id: postCodeField
-                                width: parent.width
-                                visible: page.editingAddress
-                                label: qsTr("Postcode")
-                                enabled: !starlingClient.busy
-                                onTextChanged: page.pageError = ""
-                            }
-
-                            TextField {
-                                id: countryCodeField
-                                width: parent.width
-                                visible: page.editingAddress
-                                label: qsTr("Country code")
-                                placeholderText: qsTr("GB")
-                                text: "GB"
-                                enabled: !starlingClient.busy
-                                onTextChanged: page.pageError = ""
-                            }
-
-                            TextField {
-                                id: fromDateField
-                                width: parent.width
-                                visible: page.editingAddress
-                                label: qsTr("Living here since")
-                                placeholderText: qsTr("YYYY-MM-DD")
-                                enabled: !starlingClient.busy
-                                inputMethodHints: Qt.ImhDigitsOnly
-                                onTextChanged: page.pageError = ""
-                            }
-
                             Button {
-                                width: parent.width
+                                width: Theme.itemSizeLarge
                                 visible: page.editingAddress
-                                enabled: !starlingClient.busy
-                                text: qsTr("Save address")
+                                enabled: page.canEditEmail() && !starlingClient.busy
+                                text: qsTr("Save")
                                 onClicked: page.saveAddress()
-                            }
-
-                            Label {
-                                width: parent.width
-                                visible: page.pageError.length > 0
-                                text: page.pageError
-                                color: Theme.errorColor
-                                wrapMode: Text.Wrap
-                                font.pixelSize: Theme.fontSizeSmall
                             }
                         }
                     }
