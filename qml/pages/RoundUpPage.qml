@@ -24,6 +24,46 @@ Page {
     id: page
 
     property bool readyForContent: !starlingClient.locked && starlingClient.token.length > 0
+    property bool updateRequested: false
+    property var multiplierOptions: [1, 2, 5, 10]
+    property int selectedSpaceIndex: -1
+    property int selectedMultiplier: 0
+
+    function selectedSpace() {
+        if (selectedSpaceIndex < 0 || selectedSpaceIndex >= starlingClient.spaces.length)
+            return null
+
+        return starlingClient.spaces[selectedSpaceIndex]
+    }
+
+    function selectedSpaceName(space, index) {
+        if (space && space.name && space.name.length > 0)
+            return space.name
+
+        return qsTr("Savings goal %1").arg(index + 1)
+    }
+
+    function requirePinThen(action) {
+        pinActionRunner.pendingAction = action
+        starlingClient.requestPinConfirmation()
+    }
+
+    function enableRoundUp() {
+        var space = page.selectedSpace()
+
+        if (!space || !space.spaceUid || space.spaceUid.length === 0)
+            return
+
+        if (page.selectedMultiplier < 1 || page.selectedMultiplier > 10)
+            return
+
+        page.updateRequested = true
+
+        requirePinThen(function() {
+            starlingClient.enableRoundUp(space.spaceUid,
+                                         page.selectedMultiplier)
+        })
+    }
 
     SilicaFlickable {
         anchors.fill: parent
@@ -106,8 +146,117 @@ Page {
 
                     Label {
                         width: parent.width
+                        visible: starlingClient.roundUp.active === true
+                                 && ((starlingClient.roundUp.activatedAt || "").length > 0)
+                        text: qsTr("Activated: %1").arg(starlingClient.roundUp.activatedAt)
+                        color: Theme.secondaryColor
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+
+                    Label {
+                        width: parent.width
                         visible: starlingClient.roundUp.active !== true
                         text: qsTr("Round-up automatically saves the spare change from card transactions into a savings goal.")
+                        color: Theme.secondaryColor
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+                }
+            }
+
+            Rectangle {
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * x
+                height: enableColumn.height + 2 * Theme.paddingMedium
+                visible: starlingClient.roundUpLoaded
+                         && starlingClient.roundUp.active !== true
+
+                radius: Theme.paddingMedium
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
+                border.width: 1
+                border.color: Theme.rgba(Theme.primaryColor, 0.15)
+
+                Column {
+                    id: enableColumn
+                    x: Theme.paddingMedium
+                    y: Theme.paddingMedium
+                    width: parent.width - 2 * Theme.paddingMedium
+                    spacing: Theme.paddingMedium
+
+                    Label {
+                        width: parent.width
+                        text: qsTr("Enable round-up")
+                        color: Theme.highlightColor
+                        font.pixelSize: Theme.fontSizeMedium
+                        font.bold: true
+                    }
+
+                    Label {
+                        width: parent.width
+                        text: qsTr("Choose which savings goal should receive your spare change.")
+                        color: Theme.secondaryColor
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+
+                    ComboBox {
+                        id: spaceCombo
+                        width: parent.width
+                        label: qsTr("Savings goal")
+                        enabled: starlingClient.spaces.length > 0
+                        currentIndex: -1
+                        value: page.selectedSpace()
+                               ? page.selectedSpaceName(page.selectedSpace(), page.selectedSpaceIndex)
+                               : qsTr("Choose savings goal")
+
+                        menu: ContextMenu {
+                            Repeater {
+                                model: starlingClient.spaces
+                                delegate: MenuItem {
+                                    text: page.selectedSpaceName(modelData, index)
+                                }
+                            }
+                        }
+
+                        onCurrentIndexChanged: {
+                            page.selectedSpaceIndex = currentIndex
+                        }
+                    }
+
+                    ComboBox {
+                        id: multiplierCombo
+                        width: parent.width
+                        label: qsTr("Multiplier")
+                        currentIndex: -1
+                        value: page.selectedMultiplier > 0 ? ("x" + page.selectedMultiplier) : qsTr("Choose multiplier")
+
+                        menu: ContextMenu {
+                            MenuItem { text: "x1" }
+                            MenuItem { text: "x2" }
+                            MenuItem { text: "x5" }
+                            MenuItem { text: "x10" }
+                        }
+
+                        onCurrentIndexChanged: {
+                            if (currentIndex >= 0 && currentIndex < page.multiplierOptions.length)
+                                page.selectedMultiplier = page.multiplierOptions[currentIndex]
+                        }
+                    }
+
+                    Button {
+                        width: parent.width
+                        enabled: !starlingClient.busy
+                                 && page.selectedSpace() !== null
+                                 && page.selectedMultiplier >= 1
+                                 && page.selectedMultiplier <= 10
+                        text: qsTr("Enable round-up")
+                        onClicked: page.enableRoundUp()
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: starlingClient.spaces.length === 0
+                        text: qsTr("Create a savings goal first, then enable round-up.")
                         color: Theme.secondaryColor
                         wrapMode: Text.Wrap
                         font.pixelSize: Theme.fontSizeSmall
@@ -133,6 +282,29 @@ Page {
         if (page.readyForContent) {
             starlingClient.refreshSpaces()
             starlingClient.refreshRoundUp()
+        }
+    }
+
+    QtObject {
+        id: pinActionRunner
+        property var pendingAction: null
+    }
+
+    Connections {
+        target: starlingClient
+
+        onPinConfirmed: {
+            if (pinActionRunner.pendingAction) {
+                var action = pinActionRunner.pendingAction
+                pinActionRunner.pendingAction = null
+                action()
+            }
+        }
+
+        onRoundUpUpdated: {
+            if (page.updateRequested) {
+                page.updateRequested = false
+            }
         }
     }
 

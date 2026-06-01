@@ -77,6 +77,7 @@ class StarlingClient : public QObject
     Q_PROPERTY(QVariantMap transactionMastercardDetails READ transactionMastercardDetails NOTIFY transactionMastercardDetailsChanged)
     Q_PROPERTY(QString lastAttachmentPath READ lastAttachmentPath NOTIFY lastAttachmentPathChanged)
     Q_PROPERTY(QVariantMap roundUp READ roundUp NOTIFY roundUpChanged)
+    Q_PROPERTY(bool roundUpLoaded READ roundUpLoaded NOTIFY roundUpChanged)
 
 public:
     explicit StarlingClient(QObject *parent = nullptr);
@@ -142,6 +143,7 @@ public:
     bool consentPending() const;
     bool lockOnBackground() const;
     bool pinConfirmationPending() const;
+    bool roundUpLoaded() const;
     void setToken(const QString &token);
     void setPayeeWriteToken(const QString &token);
     void setApiKeyId(const QString &value);
@@ -311,6 +313,7 @@ public:
     Q_INVOKABLE bool localFileExists(const QString &filePath) const;
     Q_INVOKABLE void clearLastAttachmentPath();
     Q_INVOKABLE void refreshRoundUp();
+    Q_INVOKABLE void enableRoundUp(const QString &roundUpGoalUid, int multiplier);
 
 signals:
     void tokenChanged();
@@ -369,6 +372,7 @@ signals:
     void lastAttachmentPathChanged();
     void transactionAttachmentUploaded(const QString &feedItemUid);
     void roundUpChanged();
+    void roundUpUpdated();
 
 private:
     // helpers
@@ -506,6 +510,7 @@ private:
     bool m_online = true;
     bool m_directDebitMandatesLoaded = false;
     bool m_standingOrdersLoaded = false;
+    bool m_roundUpLoaded = false;
     int m_pendingRequests = 0;
     int m_startupDaysBack = 14;
     int m_autoLockMinutes = 2;

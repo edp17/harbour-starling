@@ -807,15 +807,17 @@ QVariantMap StarlingClient::roundUp() const
     return m_roundUp;
 }
 
+bool StarlingClient::roundUpLoaded() const
+{
+    return m_roundUpLoaded;
+}
+
 void StarlingClient::refreshRoundUp()
 {
     if (m_accountUid.isEmpty()) {
         setStatus(QStringLiteral("Account details are missing."));
         return;
     }
-
-    m_roundUp.clear();
-    emit roundUpChanged();
 
     const QString path =
             QStringLiteral("/api/v2/feed/account/%1/round-up")
@@ -824,19 +826,25 @@ void StarlingClient::refreshRoundUp()
     setStatus(QStringLiteral("Loading round-up status..."));
 
     getJson(path, [this](const QByteArray &body) {
+
         const QJsonDocument doc = QJsonDocument::fromJson(body);
         const QJsonObject root = doc.object();
 
         QVariantMap data;
 
-        const QString goalUid = root.value(QStringLiteral("roundUpGoalUid")).toString(
-                    root.value(QStringLiteral("savingsGoalUid")).toString());
+        const bool active = root.value(QStringLiteral("active")).toBool(false);
+        const QJsonObject details = root.value(QStringLiteral("roundUpGoalDetails")).toObject();
 
-        const int multiplier = root.value(QStringLiteral("roundUpMultiplier")).toInt();
+        const QString goalUid = details.value(QStringLiteral("roundUpGoalUid")).toString();
+        const int multiplier = qRound(details.value(QStringLiteral("roundUpMultiplier")).toDouble(1.0));
 
-        data.insert(QStringLiteral("active"), !goalUid.isEmpty());
+        data.insert(QStringLiteral("active"), active);
         data.insert(QStringLiteral("roundUpGoalUid"), goalUid);
         data.insert(QStringLiteral("roundUpMultiplier"), multiplier > 0 ? multiplier : 1);
+        data.insert(QStringLiteral("activatedAt"),
+                    formatIsoDateTime(details.value(QStringLiteral("activatedAt")).toString()));
+        data.insert(QStringLiteral("activatedBy"), details.value(QStringLiteral("activatedBy")).toString());
+        data.insert(QStringLiteral("primaryCategoryUid"), details.value(QStringLiteral("primaryCategoryUid")).toString());
 
         QString goalName;
         for (int i = 0; i < m_spaces.size(); ++i) {
@@ -851,11 +859,53 @@ void StarlingClient::refreshRoundUp()
         data.insert(QStringLiteral("goalName"), goalName);
 
         m_roundUp = data;
+        m_roundUpLoaded = true;
         emit roundUpChanged();
 
         setStatus(QStringLiteral("Round-up status loaded."));
         touchLastUpdated();
     });
+}
+
+void StarlingClient::enableRoundUp(const QString &roundUpGoalUid, int multiplier)
+{
+    if (m_accountUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedGoalUid = roundUpGoalUid.trimmed();
+
+    if (trimmedGoalUid.isEmpty()) {
+        setStatus(QStringLiteral("Savings goal is missing."));
+        return;
+    }
+
+    if (multiplier < 1 || multiplier > 10) {
+        setStatus(QStringLiteral("Round-up multiplier must be between 1 and 10."));
+        return;
+    }
+
+    QJsonObject body;
+    body.insert(QStringLiteral("roundUpGoalUid"), trimmedGoalUid);
+    body.insert(QStringLiteral("roundUpMultiplier"), multiplier);
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/round-up")
+            .arg(m_accountUid);
+
+    setStatus(QStringLiteral("Enabling round-up..."));
+
+    sendJsonWithToken(path,
+                      QStringLiteral("PUT"),
+                      body,
+                      m_token,
+                      [this](const QByteArray &) {
+        setStatus(QStringLiteral("Round-up enabled."));
+        refreshRoundUp();
+        touchLastUpdated();
+        emit roundUpUpdated();
+    }, false);
 }
 
 // Feed Extract Csv - Statements/transactions
