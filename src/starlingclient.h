@@ -319,6 +319,13 @@ public:
     Q_INVOKABLE void disableRoundUp();
     Q_INVOKABLE void refreshAccountHolderBasic();
     Q_INVOKABLE void updateAccountHolderEmail(const QString &email);
+    Q_INVOKABLE void updateAccountHolderAddress(const QString &line1,
+                                                const QString &line2,
+                                                const QString &line3,
+                                                const QString &postTown,
+                                                const QString &postCode,
+                                                const QString &countryCode,
+                                                const QString &fromDate);
 
 signals:
     void tokenChanged();
@@ -380,6 +387,7 @@ signals:
     void roundUpUpdated();
     void accountHolderBasicChanged();
     void accountHolderEmailUpdated(const QString &email);
+    void accountHolderAddressUpdated();
 
 private:
     // helpers

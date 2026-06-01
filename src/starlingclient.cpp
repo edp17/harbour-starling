@@ -77,6 +77,70 @@ bool StarlingClient::localFileExists(const QString &filePath) const
     return info.exists() && info.isFile();
 }
 
+// Address
+void StarlingClient::updateAccountHolderAddress(const QString &line1,
+                                                const QString &line2,
+                                                const QString &line3,
+                                                const QString &postTown,
+                                                const QString &postCode,
+                                                const QString &countryCode,
+                                                const QString &fromDate)
+{
+    const QString trimmedLine1 = line1.trimmed();
+    const QString trimmedPostTown = postTown.trimmed();
+    const QString trimmedPostCode = postCode.trimmed();
+    const QString trimmedCountryCode = countryCode.trimmed().toUpper();
+    const QString trimmedFromDate = fromDate.trimmed();
+
+    if (trimmedLine1.isEmpty()) {
+        setStatus(QStringLiteral("Address line 1 is missing."));
+        return;
+    }
+
+    if (trimmedPostTown.isEmpty()) {
+        setStatus(QStringLiteral("Town/city is missing."));
+        return;
+    }
+
+    if (trimmedPostCode.isEmpty()) {
+        setStatus(QStringLiteral("Postcode is missing."));
+        return;
+    }
+
+    if (trimmedCountryCode.length() != 2) {
+        setStatus(QStringLiteral("Country code must be two letters."));
+        return;
+    }
+
+    const QDate parsedFromDate = QDate::fromString(trimmedFromDate, Qt::ISODate);
+    if (!parsedFromDate.isValid()) {
+        setStatus(QStringLiteral("Invalid address start date. Use YYYY-MM-DD."));
+        return;
+    }
+
+    QJsonObject body;
+    body.insert(QStringLiteral("line1"), trimmedLine1);
+    body.insert(QStringLiteral("line2"), line2.trimmed());
+    body.insert(QStringLiteral("line3"), line3.trimmed());
+    body.insert(QStringLiteral("postTown"), trimmedPostTown);
+    body.insert(QStringLiteral("postCode"), trimmedPostCode);
+    body.insert(QStringLiteral("countryCode"), trimmedCountryCode);
+    body.insert(QStringLiteral("from"), trimmedFromDate);
+
+    setStatus(QStringLiteral("Updating address..."));
+
+    sendJsonWithToken(QStringLiteral("/api/v2/addresses"),
+                      QStringLiteral("POST"),
+                      body,
+                      m_token,
+                      [this](const QByteArray &) {
+        setStatus(QStringLiteral("Address updated."));
+        refreshAll(m_startupDaysBack);
+        touchLastUpdated();
+        emit accountHolderAddressUpdated();
+    }, true);
+}
+
 // Account holder
 QVariantMap StarlingClient::accountHolderBasic() const
 {

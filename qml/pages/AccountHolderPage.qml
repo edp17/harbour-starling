@@ -27,6 +27,48 @@ Page {
     property bool editingEmail: false
     property string pageError: ""
     property string emailVerificationMessage: ""
+    property bool editingAddress: false
+    property string addressUpdateMessage: ""
+
+    function saveAddress() {
+        page.pageError = ""
+
+        if (addressLine1Field.text.trim().length === 0) {
+            page.pageError = qsTr("Address line 1 is required.")
+            return
+        }
+
+        if (postTownField.text.trim().length === 0) {
+            page.pageError = qsTr("Town/city is required.")
+            return
+        }
+
+        if (postCodeField.text.trim().length === 0) {
+            page.pageError = qsTr("Postcode is required.")
+            return
+        }
+
+        if (countryCodeField.text.trim().length !== 2) {
+            page.pageError = qsTr("Country code must be two letters, for example GB.")
+            return
+        }
+
+        if (fromDateField.text.trim().length === 0) {
+            page.pageError = qsTr("Move-in date is required.")
+            return
+        }
+
+        requirePinThen(function() {
+            starlingClient.updateAccountHolderAddress(
+                        addressLine1Field.text.trim(),
+                        addressLine2Field.text.trim(),
+                        addressLine3Field.text.trim(),
+                        postTownField.text.trim(),
+                        postCodeField.text.trim(),
+                        countryCodeField.text.trim(),
+                        fromDateField.text.trim())
+        })
+    }
 
     function canEditEmail() {
         return !starlingClient.locked && starlingClient.token.length > 0
@@ -361,6 +403,132 @@ Page {
                         }
                     }
 
+                    Rectangle {
+                        x: Theme.horizontalPageMargin
+                        width: parent.width - 2 * x
+                        height: addressEditColumn.height + 2 * Theme.paddingMedium
+
+                        radius: Theme.paddingMedium
+                        color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
+                        border.width: 1
+                        border.color: Theme.rgba(Theme.primaryColor, 0.15)
+
+                        Column {
+                            id: addressEditColumn
+                            x: Theme.paddingMedium
+                            y: Theme.paddingMedium
+                            width: parent.width - 2 * Theme.paddingMedium
+                            spacing: Theme.paddingMedium
+
+                            Label {
+                                width: parent.width
+                                text: qsTr("Update address")
+                                color: Theme.highlightColor
+                                font.pixelSize: Theme.fontSizeMedium
+                                font.bold: true
+                            }
+
+                            TextSwitch {
+                                id: editAddressSwitch
+                                width: parent.width
+                                text: qsTr("Edit address")
+                                checked: page.editingAddress
+                                enabled: page.canEditEmail() && !starlingClient.busy
+
+                                onCheckedChanged: {
+                                    page.editingAddress = checked
+
+                                    if (checked && fromDateField.text.length === 0)
+                                        fromDateField.text = page.todayIsoDate()
+                                }
+                            }
+
+                            TextField {
+                                id: addressLine1Field
+                                width: parent.width
+                                visible: page.editingAddress
+                                label: qsTr("Address line 1")
+                                enabled: !starlingClient.busy
+                                onTextChanged: page.pageError = ""
+                            }
+
+                            TextField {
+                                id: addressLine2Field
+                                width: parent.width
+                                visible: page.editingAddress
+                                label: qsTr("Address line 2")
+                                enabled: !starlingClient.busy
+                                onTextChanged: page.pageError = ""
+                            }
+
+                            TextField {
+                                id: addressLine3Field
+                                width: parent.width
+                                visible: page.editingAddress
+                                label: qsTr("Address line 3")
+                                enabled: !starlingClient.busy
+                                onTextChanged: page.pageError = ""
+                            }
+
+                            TextField {
+                                id: postTownField
+                                width: parent.width
+                                visible: page.editingAddress
+                                label: qsTr("Town/city")
+                                enabled: !starlingClient.busy
+                                onTextChanged: page.pageError = ""
+                            }
+
+                            TextField {
+                                id: postCodeField
+                                width: parent.width
+                                visible: page.editingAddress
+                                label: qsTr("Postcode")
+                                enabled: !starlingClient.busy
+                                onTextChanged: page.pageError = ""
+                            }
+
+                            TextField {
+                                id: countryCodeField
+                                width: parent.width
+                                visible: page.editingAddress
+                                label: qsTr("Country code")
+                                placeholderText: qsTr("GB")
+                                text: "GB"
+                                enabled: !starlingClient.busy
+                                onTextChanged: page.pageError = ""
+                            }
+
+                            TextField {
+                                id: fromDateField
+                                width: parent.width
+                                visible: page.editingAddress
+                                label: qsTr("Living here since")
+                                placeholderText: qsTr("YYYY-MM-DD")
+                                enabled: !starlingClient.busy
+                                inputMethodHints: Qt.ImhDigitsOnly
+                                onTextChanged: page.pageError = ""
+                            }
+
+                            Button {
+                                width: parent.width
+                                visible: page.editingAddress
+                                enabled: !starlingClient.busy
+                                text: qsTr("Save address")
+                                onClicked: page.saveAddress()
+                            }
+
+                            Label {
+                                width: parent.width
+                                visible: page.pageError.length > 0
+                                text: page.pageError
+                                color: Theme.errorColor
+                                wrapMode: Text.Wrap
+                                font.pixelSize: Theme.fontSizeSmall
+                            }
+                        }
+                    }
+
                     Column {
                         width: parent.width
                         spacing: Theme.paddingSmall / 2
@@ -414,6 +582,13 @@ Page {
             page.emailVerificationMessage =
                     qsTr("We have sent an email to\n%1\n\nPlease open the email and click the provided link to confirm your email address.")
                     .arg(email)
+        }
+
+        onAccountHolderAddressUpdated: {
+            page.editingAddress = false
+            editAddressSwitch.checked = false
+            page.pageError = ""
+            page.addressUpdateMessage = qsTr("Address updated.")
         }
     }
 
