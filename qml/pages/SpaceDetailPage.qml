@@ -157,6 +157,60 @@ Page {
             Rectangle {
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * x
+                height: roundUpColumn.height + 2 * Theme.paddingMedium
+                visible: true
+
+                radius: Theme.paddingMedium
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
+                border.width: 1
+                border.color: Theme.rgba(Theme.primaryColor, 0.15)
+
+                Column {
+                    id: roundUpColumn
+                    x: Theme.paddingMedium
+                    y: Theme.paddingMedium
+                    width: parent.width - 2 * Theme.paddingMedium
+                    spacing: Theme.paddingSmall
+
+                    Label {
+                        width: parent.width
+                        text: qsTr("Round-up")
+                        color: Theme.highlightColor
+                        font.pixelSize: Theme.fontSizeMedium
+                    }
+
+                    Label {
+                        width: parent.width
+                        text: starlingClient.roundUp.active === true
+                              && starlingClient.roundUp.roundUpGoalUid === page.space.spaceUid
+                              ? qsTr("Active for this savings goal")
+                              : qsTr("Not active for this savings goal")
+                        color: starlingClient.roundUp.active === true
+                               && starlingClient.roundUp.roundUpGoalUid === page.space.spaceUid
+                               ? Theme.highlightColor
+                               : Theme.secondaryColor
+                        font.pixelSize: Theme.fontSizeMedium
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: starlingClient.roundUp.active === true
+                                 && starlingClient.roundUp.roundUpGoalUid === page.space.spaceUid
+                        text: qsTr("Multiplier: %1x").arg(starlingClient.roundUp.roundUpMultiplier || 1)
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+
+                    Button {
+                        width: parent.width
+                        text: qsTr("Manage round-up")
+                        onClicked: pageStack.push(Qt.resolvedUrl("RoundUpPage.qml"))
+                    }
+                }
+            }
+
+            Rectangle {
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * x
                 height: detailsColumn.height + 2 * Theme.paddingMedium
 
                 radius: Theme.paddingMedium
@@ -381,5 +435,9 @@ Page {
                 pageStack.pop()
             }
         }
+    }
+
+    Component.onCompleted: {
+        starlingClient.refreshRoundUp()
     }
 }

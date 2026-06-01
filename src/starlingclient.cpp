@@ -867,6 +867,27 @@ void StarlingClient::refreshRoundUp()
     });
 }
 
+void StarlingClient::disableRoundUp()
+{
+    if (m_accountUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/round-up")
+            .arg(m_accountUid);
+
+    setStatus(QStringLiteral("Disabling round-up..."));
+
+    sendDeleteWithToken(path, m_token, [this](const QByteArray &) {
+        setStatus(QStringLiteral("Round-up disabled."));
+        refreshRoundUp();
+        touchLastUpdated();
+        emit roundUpUpdated();
+    });
+}
+
 void StarlingClient::enableRoundUp(const QString &roundUpGoalUid, int multiplier)
 {
     if (m_accountUid.isEmpty()) {

@@ -314,6 +314,7 @@ public:
     Q_INVOKABLE void clearLastAttachmentPath();
     Q_INVOKABLE void refreshRoundUp();
     Q_INVOKABLE void enableRoundUp(const QString &roundUpGoalUid, int multiplier);
+    Q_INVOKABLE void disableRoundUp();
 
 signals:
     void tokenChanged();

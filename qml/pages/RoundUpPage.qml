@@ -65,6 +65,14 @@ Page {
         })
     }
 
+    function disableRoundUp() {
+        page.updateRequested = true
+
+        requirePinThen(function() {
+            starlingClient.disableRoundUp()
+        })
+    }
+
     SilicaFlickable {
         anchors.fill: parent
         contentHeight: contentColumn.height + Theme.paddingLarge
@@ -260,6 +268,49 @@ Page {
                         color: Theme.secondaryColor
                         wrapMode: Text.Wrap
                         font.pixelSize: Theme.fontSizeSmall
+                    }
+                }
+            }
+
+            Rectangle {
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * x
+                height: disableColumn.height + 2 * Theme.paddingMedium
+                visible: starlingClient.roundUpLoaded && starlingClient.roundUp.active === true
+
+                radius: Theme.paddingMedium
+                color: Theme.rgba(Theme.errorColor, 0.08)
+                border.width: 1
+                border.color: Theme.rgba(Theme.errorColor, 0.25)
+
+                Column {
+                    id: disableColumn
+                    x: Theme.paddingMedium
+                    y: Theme.paddingMedium
+                    width: parent.width - 2 * Theme.paddingMedium
+                    spacing: Theme.paddingMedium
+
+                    Label {
+                        width: parent.width
+                        text: qsTr("Disable round-up")
+                        color: Theme.highlightColor
+                        font.pixelSize: Theme.fontSizeMedium
+                        font.bold: true
+                    }
+
+                    Label {
+                        width: parent.width
+                        text: qsTr("This stops spare change from card payments being moved into your savings goal.")
+                        color: Theme.secondaryColor
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+
+                    Button {
+                        width: parent.width
+                        enabled: !starlingClient.busy
+                        text: qsTr("Disable round-up")
+                        onClicked: page.disableRoundUp()
                     }
                 }
             }
