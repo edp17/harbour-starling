@@ -30,6 +30,31 @@ Page {
     property bool editingAddress: false
     property string addressUpdateMessage: ""
 
+    function todayIsoDate() {
+        return new Date().toISOString().substring(0, 10)
+    }
+
+    function isValidIsoDate(value) {
+        var text = (value || "").trim()
+
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(text))
+            return false
+
+        var parts = text.split("-")
+        var year = parseInt(parts[0], 10)
+        var month = parseInt(parts[1], 10)
+        var day = parseInt(parts[2], 10)
+
+        if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31)
+            return false
+
+        var date = new Date(year, month - 1, day)
+
+        return date.getFullYear() === year
+                && date.getMonth() === month - 1
+                && date.getDate() === day
+    }
+
     function prefillAddressFields() {
         addressLine1Field.text = starlingClient.currentAddress.line1 || ""
         addressLine2Field.text = starlingClient.currentAddress.line2 || ""
@@ -63,8 +88,8 @@ Page {
             return
         }
 
-        if (fromDateField.text.trim().length === 0) {
-            page.pageError = qsTr("Move-in date is required.")
+        if (!page.isValidIsoDate(fromDateField.text.trim())) {
+            page.pageError = qsTr("Enter a valid move-in date in YYYY-MM-DD format.")
             return
         }
 
@@ -517,12 +542,13 @@ Page {
 
                                 onCheckedChanged: {
                                     page.editingAddress = checked
+                                    page.addressUpdateMessage = ""
 
                                     if (checked) {
                                         page.prefillAddressFields()
 
-                                        if (fromDateField.text.length === 0)
-                                            fromDateField.text = page.todayIsoDate()
+//                                        if (fromDateField.text.length === 0)
+//                                            fromDateField.text = page.todayIsoDate()
                                     }
                                 }
                             }
@@ -533,6 +559,47 @@ Page {
                                 enabled: page.canEditEmail() && !starlingClient.busy
                                 text: qsTr("Save")
                                 onClicked: page.saveAddress()
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        x: Theme.horizontalPageMargin
+                        width: parent.width - 2 * x
+                        height: addressUpdateColumn.height + 2 * Theme.paddingMedium
+                        visible: page.addressUpdateMessage.length > 0
+
+                        radius: Theme.paddingMedium
+                        color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
+                        border.width: 1
+                        border.color: Theme.rgba(Theme.highlightColor, 0.35)
+
+                        Column {
+                            id: addressUpdateColumn
+                            x: Theme.paddingMedium
+                            y: Theme.paddingMedium
+                            width: parent.width - 2 * Theme.paddingMedium
+                            spacing: Theme.paddingMedium
+
+                            Label {
+                                width: parent.width
+                                text: qsTr("Address update")
+                                color: Theme.highlightColor
+                                font.pixelSize: Theme.fontSizeMedium
+                                font.bold: true
+                            }
+
+                            Label {
+                                width: parent.width
+                                text: page.addressUpdateMessage
+                                color: Theme.primaryColor
+                                wrapMode: Text.Wrap
+                            }
+
+                            Button {
+                                width: parent.width
+                                text: qsTr("OK")
+                                onClicked: page.addressUpdateMessage = ""
                             }
                         }
                     }
@@ -596,7 +663,9 @@ Page {
             page.editingAddress = false
             editAddressSwitch.checked = false
             page.pageError = ""
-            page.addressUpdateMessage = qsTr("Address updated.")
+
+            page.addressUpdateMessage =
+                    qsTr("Your address update has been submitted. Starling may review or confirm the change before it fully appears on your account.")
         }
     }
 
