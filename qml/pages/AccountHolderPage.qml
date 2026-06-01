@@ -23,11 +23,38 @@ import "../components"
 Page {
     id: page
 
+    property bool isOnline: starlingClient.online
+    property bool editingEmail: false
+    property string pageError: ""
+    property string emailVerificationMessage: ""
+
+    function canEditEmail() {
+        return !starlingClient.locked && starlingClient.token.length > 0
+    }
+
+    function requirePinThen(action) {
+        pinActionRunner.pendingAction = action
+        starlingClient.requestPinConfirmation()
+    }
+
+    function saveEmail() {
+        page.pageError = ""
+
+        var email = emailField.text.trim()
+
+        if (email.length === 0 || email.indexOf("@") < 0 || email.indexOf(".") < 0) {
+            page.pageError = qsTr("Enter a valid email address.")
+            return
+        }
+
+        requirePinThen(function() {
+            starlingClient.updateAccountHolderEmail(email)
+        })
+    }
+
     function hasText(value) {
         return value !== undefined && value !== null && String(value).length > 0
     }
-
-    property bool isOnline: starlingClient.online
 
     Component.onCompleted: {
         if (!starlingClient.locked && starlingClient.token.length > 0)
@@ -219,9 +246,98 @@ Page {
 
                         Label {
                             width: parent.width
-                            text: starlingClient.email
+                            visible: !page.editingEmail
+                            text: starlingClient.email || ""
                             color: Theme.primaryColor
                             wrapMode: Text.Wrap
+                        }
+
+                        TextField {
+                            id: emailField
+                            width: parent.width
+                            visible: page.editingEmail
+                            label: qsTr("Email address")
+                            text: starlingClient.email || ""
+                            inputMethodHints: Qt.ImhEmailCharactersOnly
+                            enabled: page.canEditEmail() && !starlingClient.busy
+                            onTextChanged: page.pageError = ""
+                        }
+
+                        Row {
+                            width: parent.width
+                            spacing: Theme.paddingSmall
+
+                            TextSwitch {
+                                id: editEmailSwitch
+                                width: parent.width - Theme.itemSizeLarge - Theme.paddingSmall
+                                text: qsTr("Edit email")
+                                checked: page.editingEmail
+                                enabled: page.canEditEmail() && !starlingClient.busy
+
+                                onCheckedChanged: {
+                                    page.editingEmail = checked
+                                    if (checked)
+                                        emailField.text = starlingClient.email || ""
+                                }
+                            }
+
+                            Button {
+                                width: Theme.itemSizeLarge
+                                visible: page.editingEmail
+                                enabled: page.canEditEmail() && !starlingClient.busy
+                                text: qsTr("Save")
+                                onClicked: page.saveEmail()
+                            }
+                        }
+
+                        Rectangle {
+                            x: Theme.horizontalPageMargin
+                            width: parent.width - 2 * x
+                            height: emailVerificationColumn.height + 2 * Theme.paddingMedium
+                            visible: page.emailVerificationMessage.length > 0
+
+                            radius: Theme.paddingMedium
+                            color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
+                            border.width: 1
+                            border.color: Theme.rgba(Theme.highlightColor, 0.35)
+
+                            Column {
+                                id: emailVerificationColumn
+                                x: Theme.paddingMedium
+                                y: Theme.paddingMedium
+                                width: parent.width - 2 * Theme.paddingMedium
+                                spacing: Theme.paddingMedium
+
+                                Label {
+                                    width: parent.width
+                                    text: qsTr("Verify your email address")
+                                    color: Theme.highlightColor
+                                    font.pixelSize: Theme.fontSizeMedium
+                                    font.bold: true
+                                }
+
+                                Label {
+                                    width: parent.width
+                                    text: page.emailVerificationMessage
+                                    color: Theme.primaryColor
+                                    wrapMode: Text.Wrap
+                                }
+
+                                Button {
+                                    width: parent.width
+                                    text: qsTr("OK")
+                                    onClicked: page.emailVerificationMessage = ""
+                                }
+                            }
+                        }
+
+                        Label {
+                            width: parent.width
+                            visible: page.pageError.length > 0
+                            text: page.pageError
+                            color: Theme.errorColor
+                            wrapMode: Text.Wrap
+                            font.pixelSize: Theme.fontSizeSmall
                         }
                     }
 
@@ -271,6 +387,33 @@ Page {
                 width: 1
                 height: Theme.paddingMedium
             }
+        }
+    }
+
+    QtObject {
+        id: pinActionRunner
+        property var pendingAction: null
+    }
+
+    Connections {
+        target: starlingClient
+
+        onPinConfirmed: {
+            if (pinActionRunner.pendingAction) {
+                var action = pinActionRunner.pendingAction
+                pinActionRunner.pendingAction = null
+                action()
+            }
+        }
+
+        onAccountHolderEmailUpdated: {
+            page.editingEmail = false
+            editEmailSwitch.checked = false
+            page.pageError = ""
+
+            page.emailVerificationMessage =
+                    qsTr("We have sent an email to\n%1\n\nPlease open the email and click the provided link to confirm your email address.")
+                    .arg(email)
         }
     }
 

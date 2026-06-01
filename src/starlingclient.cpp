@@ -108,6 +108,39 @@ void StarlingClient::refreshAccountHolderBasic()
     });
 }
 
+void StarlingClient::updateAccountHolderEmail(const QString &email)
+{
+    const QString trimmedEmail = email.trimmed();
+
+    if (trimmedEmail.isEmpty()) {
+        setStatus(QStringLiteral("Email address is missing."));
+        return;
+    }
+
+    if (!trimmedEmail.contains(QLatin1Char('@')) || !trimmedEmail.contains(QLatin1Char('.'))) {
+        setStatus(QStringLiteral("Invalid email address."));
+        return;
+    }
+
+    QJsonObject body;
+    body.insert(QStringLiteral("email"), trimmedEmail);
+
+    setStatus(QStringLiteral("Updating email address..."));
+
+    sendJsonWithToken(QStringLiteral("/api/v2/account-holder/individual/email"),
+                      QStringLiteral("PUT"),
+                      body,
+                      m_token,
+                      [this, trimmedEmail](const QByteArray &) {
+        m_email = trimmedEmail;
+        emit accountChanged();
+
+        setStatus(QStringLiteral("Email address updated."));
+        touchLastUpdated();
+        emit accountHolderEmailUpdated(trimmedEmail);
+    }, true);
+}
+
 // Transactions
 QString StarlingClient::lastAttachmentPath() const
 {

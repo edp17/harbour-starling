@@ -318,6 +318,7 @@ public:
     Q_INVOKABLE void enableRoundUp(const QString &roundUpGoalUid, int multiplier);
     Q_INVOKABLE void disableRoundUp();
     Q_INVOKABLE void refreshAccountHolderBasic();
+    Q_INVOKABLE void updateAccountHolderEmail(const QString &email);
 
 signals:
     void tokenChanged();
@@ -378,6 +379,7 @@ signals:
     void roundUpChanged();
     void roundUpUpdated();
     void accountHolderBasicChanged();
+    void accountHolderEmailUpdated(const QString &email);
 
 private:
     // helpers
