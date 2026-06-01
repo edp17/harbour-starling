@@ -1054,7 +1054,40 @@ void StarlingClient::refreshDirectDebitPayments(const QString &mandateUid)
             QStringLiteral("/api/v2/direct-debit/mandates/%1/payments")
             .arg(trimmedUid);
 
-    getJson(path, [this](const QByteArray &body) {
+    QUrl url(QString::fromLatin1(BASE_URL) + path);
+
+    QNetworkRequest req(url);
+    req.setRawHeader("Authorization", QByteArray("Bearer ") + m_token.toUtf8());
+
+    beginRequest();
+
+    QNetworkReply *rep = m_nam.get(req);
+
+    connect(rep, &QNetworkReply::finished, this, [this, rep]() {
+        const QByteArray body = rep->readAll();
+        const int httpStatus =
+                rep->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+
+        if (rep->error() != QNetworkReply::NoError) {
+            qWarning() << "refreshDirectDebitPayments failed url=" << rep->url()
+                       << "status=" << httpStatus
+                       << "qtError=" << rep->errorString()
+                       << "body=" << QString::fromUtf8(body);
+
+            m_directDebitPayments.clear();
+            emit directDebitPaymentsChanged();
+
+            if (httpStatus == 400) {
+                setStatus(QStringLiteral("No Direct Debit payments found."));
+            } else {
+                setStatus(QStringLiteral("Direct Debit payment history unavailable."));
+            }
+
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
         const QJsonDocument doc = QJsonDocument::fromJson(body);
         const QJsonObject root = doc.object();
 
@@ -1068,15 +1101,18 @@ void StarlingClient::refreshDirectDebitPayments(const QString &mandateUid)
             const QJsonObject item = items.at(i).toObject();
 
             const QJsonObject amount = item.value(QStringLiteral("amount")).toObject();
-            const QString currency = amount.value(QStringLiteral("currency")).toString(QStringLiteral("GBP"));
-            const qint64 minor = amount.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
+            const QString currency =
+                    amount.value(QStringLiteral("currency")).toString(QStringLiteral("GBP"));
+            const qint64 minor =
+                    amount.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
 
             QVariantMap row;
             row.insert(QStringLiteral("date"),
                        item.value(QStringLiteral("date")).toString(
                            item.value(QStringLiteral("paymentDate")).toString(
                                item.value(QStringLiteral("created")).toString())));
-            row.insert(QStringLiteral("amount"), minor > 0 ? formatMinorUnits(minor, currency) : QString());
+            row.insert(QStringLiteral("amount"),
+                       minor > 0 ? formatMinorUnits(minor, currency) : QString());
             row.insert(QStringLiteral("status"), item.value(QStringLiteral("status")).toString());
             row.insert(QStringLiteral("reference"), item.value(QStringLiteral("reference")).toString());
 
@@ -1086,7 +1122,12 @@ void StarlingClient::refreshDirectDebitPayments(const QString &mandateUid)
         m_directDebitPayments = rows;
         emit directDebitPaymentsChanged();
 
-        setStatus(QStringLiteral("Loaded %1 Direct Debit payment(s).").arg(rows.size()));
+        setStatus(rows.isEmpty()
+                  ? QStringLiteral("No Direct Debit payments found.")
+                  : QStringLiteral("Loaded %1 Direct Debit payment(s).").arg(rows.size()));
+
+        rep->deleteLater();
+        endRequest();
     });
 }
 
