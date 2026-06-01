@@ -128,15 +128,6 @@ Page {
 
         if (page.isStandingOrder && page.payment.paymentOrderUid && page.payment.paymentOrderUid.length > 0)
             starlingClient.refreshStandingOrderUpcomingPayments(page.payment.paymentOrderUid)
-
-        if (page.isStandingOrder && page.payment.paymentOrderUid && page.payment.paymentOrderUid.length > 0)
-            starlingClient.refreshStandingOrderPaymentHistory(page.payment.paymentOrderUid)
-
-        if (page.isDirectDebit
-                && page.payment.mandateUid
-                && page.payment.mandateUid.length > 0) {
-            starlingClient.refreshDirectDebitPayments(page.payment.mandateUid)
-        }
     }
 
     SilicaFlickable {
@@ -313,6 +304,18 @@ Page {
 
                         onCheckedChanged: {
                             page.showPaymentHistory = checked
+
+                            if (checked && page.isDirectDebit
+                                    && page.payment.mandateUid
+                                    && page.payment.mandateUid.length > 0) {
+                                starlingClient.refreshDirectDebitPayments(page.payment.mandateUid)
+                            }
+
+                            if (checked && page.isStandingOrder
+                                    && page.payment.paymentOrderUid
+                                    && page.payment.paymentOrderUid.length > 0) {
+                                starlingClient.refreshStandingOrderPaymentHistory(page.payment.paymentOrderUid)
+                            }
                         }
                     }
 
