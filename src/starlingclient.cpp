@@ -78,6 +78,21 @@ bool StarlingClient::localFileExists(const QString &filePath) const
 }
 
 // Profile image
+bool StarlingClient::isSupportedProfileImageFile(const QString &filePath) const
+{
+    QFileInfo info(filePath.trimmed());
+    if (!info.exists() || !info.isFile())
+        return false;
+
+    QMimeDatabase mimeDb;
+    const QMimeType mime = mimeDb.mimeTypeForFile(info);
+    const QString mimeName = mime.isValid()
+            ? mime.name()
+            : QStringLiteral("application/octet-stream");
+
+    return mimeName.startsWith(QStringLiteral("image/"));
+}
+
 QString StarlingClient::profileImagePath() const
 {
     return m_profileImagePath;
@@ -182,6 +197,113 @@ void StarlingClient::refreshProfileImage()
 
         rep->deleteLater();
         endRequest();
+    });
+}
+
+void StarlingClient::updateProfileImage(const QString &filePath)
+{
+    const QString accountHolderUid =
+            m_accountHolderBasic.value(QStringLiteral("accountHolderUid")).toString();
+
+    if (accountHolderUid.isEmpty()) {
+        setStatus(QStringLiteral("Account holder ID is missing."));
+        return;
+    }
+
+    const QString trimmedFilePath = filePath.trimmed();
+
+    QFileInfo info(trimmedFilePath);
+    if (!info.exists() || !info.isFile()) {
+        setStatus(QStringLiteral("Profile image file not found."));
+        return;
+    }
+
+    QMimeDatabase mimeDb;
+    const QMimeType mime = mimeDb.mimeTypeForFile(info);
+    const QString mimeName = mime.isValid()
+            ? mime.name()
+            : QStringLiteral("application/octet-stream");
+
+    if (!mimeName.startsWith(QStringLiteral("image/"))) {
+        setStatus(QStringLiteral("Only image files can be used as a profile image."));
+        return;
+    }
+
+    QFile file(info.absoluteFilePath());
+    if (!file.open(QIODevice::ReadOnly)) {
+        setStatus(QStringLiteral("Could not open profile image."));
+        return;
+    }
+
+    const QByteArray body = file.readAll();
+    file.close();
+
+    const QString path =
+            QStringLiteral("/api/v2/account-holder/%1/profile-image")
+            .arg(accountHolderUid);
+
+    QUrl url(QString::fromLatin1(BASE_URL) + path);
+
+    QNetworkRequest req(url);
+    req.setRawHeader("Authorization", QByteArray("Bearer ") + m_token.toUtf8());
+    req.setHeader(QNetworkRequest::ContentTypeHeader, QVariant(mimeName));
+
+    setStatus(QStringLiteral("Updating profile image..."));
+    beginRequest();
+
+    QNetworkReply *rep = m_nam.put(req, body);
+
+    connect(rep, &QNetworkReply::finished, this, [this, rep]() {
+        const QByteArray responseBody = rep->readAll();
+        const int httpStatus =
+                rep->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+
+        if (rep->error() != QNetworkReply::NoError) {
+            qWarning() << "updateProfileImage failed url=" << rep->url()
+                       << "status=" << httpStatus
+                       << "qtError=" << rep->errorString()
+                       << "body=" << QString::fromUtf8(responseBody);
+
+            setStatus(QStringLiteral("Profile image update failed: %1").arg(rep->errorString()));
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        setStatus(QStringLiteral("Profile image updated."));
+        refreshProfileImage();
+        touchLastUpdated();
+        emit profileImageUpdated();
+
+        rep->deleteLater();
+        endRequest();
+    });
+}
+
+void StarlingClient::deleteProfileImage()
+{
+    const QString accountHolderUid =
+            m_accountHolderBasic.value(QStringLiteral("accountHolderUid")).toString();
+
+    if (accountHolderUid.isEmpty()) {
+        setStatus(QStringLiteral("Account holder ID is missing."));
+        return;
+    }
+
+    const QString path =
+            QStringLiteral("/api/v2/account-holder/%1/profile-image")
+            .arg(accountHolderUid);
+
+    setStatus(QStringLiteral("Deleting profile image..."));
+
+    sendDeleteWithToken(path, m_token, [this](const QByteArray &) {
+        m_profileImageAvailable = false;
+        m_profileImagePath.clear();
+        emit profileImageChanged();
+
+        setStatus(QStringLiteral("Profile image deleted."));
+        touchLastUpdated();
+        emit profileImageDeleted();
     });
 }
 

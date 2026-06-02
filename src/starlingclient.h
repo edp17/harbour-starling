@@ -333,6 +333,9 @@ public:
                                                 const QString &countryCode,
                                                 const QString &fromDate);
     Q_INVOKABLE void refreshProfileImage();
+    Q_INVOKABLE void updateProfileImage(const QString &filePath);
+    Q_INVOKABLE void deleteProfileImage();
+    Q_INVOKABLE bool isSupportedProfileImageFile(const QString &filePath) const;
 
 signals:
     void tokenChanged();
@@ -396,6 +399,8 @@ signals:
     void accountHolderEmailUpdated(const QString &email);
     void accountHolderAddressUpdated();
     void profileImageChanged();
+    void profileImageUpdated();
+    void profileImageDeleted();
 
 private:
     // helpers

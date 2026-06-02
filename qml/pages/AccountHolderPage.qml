@@ -18,6 +18,7 @@
 */
 import QtQuick 2.0
 import Sailfish.Silica 1.0
+import Sailfish.Pickers 1.0
 import "../components"
 
 Page {
@@ -29,6 +30,43 @@ Page {
     property string emailVerificationMessage: ""
     property bool editingAddress: false
     property string addressUpdateMessage: ""
+    property bool editingProfileImage: false
+    property string profileImagePath: ""
+    property string profileImageError: ""
+    property bool profileImagePreviewOpen: false
+
+    function chooseProfileImage() {
+        pageStack.push(profileImagePickerComponent)
+    }
+
+    function saveProfileImage() {
+        page.profileImageError = ""
+
+        if (profileImagePath.length === 0) {
+            page.profileImageError = qsTr("Choose an image first.")
+            return
+        }
+
+        if (!starlingClient.localFileExists(profileImagePath)) {
+            page.profileImageError = qsTr("File not found.")
+            return
+        }
+
+        if (!starlingClient.isSupportedProfileImageFile(profileImagePath)) {
+            page.profileImageError = qsTr("Choose an image file.")
+            return
+        }
+
+        requirePinThen(function() {
+            starlingClient.updateProfileImage(profileImagePath)
+        })
+    }
+
+    function removeProfileImage() {
+        requirePinThen(function() {
+            starlingClient.deleteProfileImage()
+        })
+    }
 
     function todayIsoDate() {
         return new Date().toISOString().substring(0, 10)
@@ -171,22 +209,66 @@ Page {
                     width: parent.width - 2 * Theme.paddingMedium
                     spacing: Theme.paddingMedium
 
-                    Label {
+                    Item {
                         width: parent.width
-                        text: qsTr("Profile image")
-                        color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeMedium
+                        height: Math.max(titleLabel.height, editProfileImageSwitch.height)
+
+                        Label {
+                            id: titleLabel
+                            anchors.left: parent.left
+                            anchors.right: editProfileImageSwitch.left
+                            anchors.rightMargin: Theme.paddingMedium
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            text: qsTr("Profile image")
+                            color: Theme.highlightColor
+                            font.pixelSize: Theme.fontSizeSmall
+                            truncationMode: TruncationMode.Fade
+                        }
+
+                        TextSwitch {
+                            id: editProfileImageSwitch
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            width: Theme.itemSizeHuge
+                            text: qsTr("Edit")
+                            checked: page.editingProfileImage
+                            enabled: !starlingClient.busy
+
+                            onCheckedChanged: {
+                                page.editingProfileImage = checked
+
+                                if (!checked) {
+                                    page.profileImageError = ""
+                                }
+                            }
+                        }
                     }
 
-                    Image {
-                        width: Math.min(parent.width, Theme.itemSizeHuge * 2)
-                        height: width
-                        anchors.horizontalCenter: parent.horizontalCenter
+                    Item {
+                        width: parent.width
+                        height: profileImage.visible ? profileImage.height : 0
                         visible: starlingClient.profileImageAvailable
-                        source: starlingClient.profileImageAvailable
-                                ? "file://" + starlingClient.profileImagePath
-                                : ""
-                        fillMode: Image.PreserveAspectCrop
+
+                        Image {
+                            id: profileImage
+                            width: Theme.itemSizeHuge
+                            height: width
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            visible: starlingClient.profileImageAvailable
+                            source: starlingClient.profileImageAvailable
+                                    ? "file://" + starlingClient.profileImagePath
+                                    : ""
+                            fillMode: Image.PreserveAspectCrop
+                            cache: false
+                        }
+
+                        MouseArea {
+                            anchors.fill: profileImage
+                            enabled: starlingClient.profileImageAvailable
+                            onClicked: page.profileImagePreviewOpen = true
+                        }
                     }
 
                     Label {
@@ -194,6 +276,52 @@ Page {
                         visible: !starlingClient.profileImageAvailable
                         text: qsTr("No profile image found.")
                         color: Theme.secondaryColor
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+
+                    Button {
+                        width: parent.width
+                        visible: page.editingProfileImage
+                        enabled: !starlingClient.busy
+                        text: qsTr("Choose new image")
+                        onClicked: page.chooseProfileImage()
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: page.editingProfileImage && page.profileImagePath.length > 0
+                        text: page.profileImagePath
+                        color: Theme.secondaryColor
+                        wrapMode: Text.WrapAnywhere
+                        font.pixelSize: Theme.fontSizeExtraSmall
+                    }
+
+                    Row {
+                        width: parent.width
+                        spacing: Theme.paddingSmall
+                        visible: page.editingProfileImage
+
+                        Button {
+                            width: (parent.width - Theme.paddingSmall) / 2
+                            enabled: !starlingClient.busy
+                            text: qsTr("Save image")
+                            onClicked: page.saveProfileImage()
+                        }
+
+                        Button {
+                            width: (parent.width - Theme.paddingSmall) / 2
+                            enabled: !starlingClient.busy && starlingClient.profileImageAvailable
+                            text: qsTr("Remove image")
+                            onClicked: page.removeProfileImage()
+                        }
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: page.profileImageError.length > 0
+                        text: page.profileImageError
+                        color: Theme.errorColor
                         wrapMode: Text.Wrap
                         font.pixelSize: Theme.fontSizeSmall
                     }
@@ -684,6 +812,29 @@ Page {
         property var pendingAction: null
     }
 
+    Component {
+        id: profileImagePickerComponent
+
+        FilePickerPage {
+            title: qsTr("Select profile image")
+            nameFilters: [
+                "*.jpg",
+                "*.jpeg",
+                "*.png",
+                "*.webp"
+            ]
+
+            onSelectedContentPropertiesChanged: {
+                if (selectedContentProperties && selectedContentProperties.filePath) {
+                    page.profileImagePath = selectedContentProperties.filePath
+                    page.profileImageError = ""
+                    page.editingProfileImage = true
+                    editProfileImageSwitch.checked = true
+                }
+            }
+        }
+    }
+
     Connections {
         target: starlingClient
 
@@ -717,6 +868,51 @@ Page {
         onAccountHolderBasicChanged: {
             if ((starlingClient.accountHolderBasic.accountHolderUid || "").length > 0)
                 starlingClient.refreshProfileImage()
+        }
+
+        onProfileImageUpdated: {
+            page.editingProfileImage = false
+            editProfileImageSwitch.checked = false
+            page.profileImagePath = ""
+            page.profileImageError = ""
+            page.profileImagePreviewOpen = false
+        }
+
+        onProfileImageDeleted: {
+            page.editingProfileImage = false
+            editProfileImageSwitch.checked = false
+            page.profileImagePath = ""
+            page.profileImageError = ""
+            page.profileImagePreviewOpen = false
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        visible: page.profileImagePreviewOpen
+        z: 999
+
+        Rectangle {
+            anchors.fill: parent
+            color: Theme.rgba(Theme.overlayBackgroundColor, 0.90)
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: page.profileImagePreviewOpen = false
+        }
+
+        Image {
+            anchors.centerIn: parent
+            width: Math.min(parent.width - 2 * Theme.horizontalPageMargin,
+                            sourceSize.width > 0 ? sourceSize.width : parent.width - 2 * Theme.horizontalPageMargin)
+            height: Math.min(parent.height - 2 * Theme.paddingLarge,
+                             sourceSize.height > 0 ? sourceSize.height : parent.height - 2 * Theme.paddingLarge)
+            source: starlingClient.profileImageAvailable
+                    ? "file://" + starlingClient.profileImagePath
+                    : ""
+            fillMode: Image.PreserveAspectFit
+            cache: false
         }
     }
 
