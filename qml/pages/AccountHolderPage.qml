@@ -488,11 +488,39 @@ Page {
                         spacing: Theme.paddingSmall / 2
                         visible: hasText(starlingClient.email)
 
-                        Label {
+                        Item {
                             width: parent.width
-                            text: qsTr("Email address")
-                            color: Theme.secondaryHighlightColor
-                            font.pixelSize: Theme.fontSizeExtraSmall
+                            height: Math.max(emailTitleLabel.height, editEmailSwitch.height)
+
+                            Label {
+                                id: emailTitleLabel
+                                anchors.left: parent.left
+                                anchors.right: editEmailSwitch.left
+                                anchors.rightMargin: Theme.paddingMedium
+                                anchors.verticalCenter: parent.verticalCenter
+
+                                text: qsTr("Email address")
+                                color: Theme.secondaryHighlightColor
+                                font.pixelSize: Theme.fontSizeExtraSmall
+                                truncationMode: TruncationMode.Fade
+                            }
+
+                            TextSwitch {
+                                id: editEmailSwitch
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+
+                                width: Theme.itemSizeHuge * 1.2
+                                text: qsTr("Edit")
+                                checked: page.editingEmail
+                                enabled: page.canEditEmail() && !starlingClient.busy
+
+                                onCheckedChanged: {
+                                    page.editingEmail = checked
+                                    if (checked)
+                                        emailField.text = starlingClient.email || ""
+                                }
+                            }
                         }
 
                         Label {
@@ -514,32 +542,13 @@ Page {
                             onTextChanged: page.pageError = ""
                         }
 
-                        Row {
+                        Button {
+                            visible: page.editingEmail
                             width: parent.width
-                            spacing: Theme.paddingSmall
-
-                            TextSwitch {
-                                id: editEmailSwitch
-                                width: parent.width - Theme.itemSizeLarge - Theme.paddingSmall
-                                text: qsTr("Edit email")
-                                checked: page.editingEmail
-                                enabled: page.canEditEmail() && !starlingClient.busy
-
-                                onCheckedChanged: {
-                                    page.editingEmail = checked
-                                    if (checked)
-                                        emailField.text = starlingClient.email || ""
-                                }
+                            enabled: page.canEditEmail() && !starlingClient.busy
+                            text: qsTr("Save new email address")
+                            onClicked: page.saveEmail()
                             }
-
-                            Button {
-                                width: Theme.itemSizeLarge
-                                visible: page.editingEmail
-                                enabled: page.canEditEmail() && !starlingClient.busy
-                                text: qsTr("Save")
-                                onClicked: page.saveEmail()
-                            }
-                        }
 
                         Rectangle {
                             x: Theme.horizontalPageMargin
@@ -597,11 +606,41 @@ Page {
                         spacing: Theme.paddingSmall / 2
                         visible: hasText(starlingClient.postalAddress) || page.editingAddress
 
-                        Label {
+                        Item {
                             width: parent.width
-                            text: qsTr("Postal address")
-                            color: Theme.secondaryHighlightColor
-                            font.pixelSize: Theme.fontSizeExtraSmall
+                            height: Math.max(addressTitleLabel.height, editAddressSwitch.height)
+
+                            Label {
+                                id: addressTitleLabel
+                                anchors.left: parent.left
+                                anchors.right: editAddressSwitch.left
+                                anchors.rightMargin: Theme.paddingMedium
+                                anchors.verticalCenter: parent.verticalCenter
+
+                                text: qsTr("Postal address")
+                                color: Theme.secondaryHighlightColor
+                                font.pixelSize: Theme.fontSizeExtraSmall
+                                truncationMode: TruncationMode.Fade
+                            }
+
+                            TextSwitch {
+                                id: editAddressSwitch
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+
+                                width: Theme.itemSizeHuge * 1.2
+                                text: qsTr("Edit")
+                                checked: page.editingAddress
+                                enabled: page.canEditEmail() && !starlingClient.busy
+
+                                onCheckedChanged: {
+                                    page.editingAddress = checked
+                                    page.addressUpdateMessage = ""
+
+                                    if (checked)
+                                        page.prefillAddressFields()
+                                }
+                            }
                         }
 
                         Label {
@@ -610,6 +649,15 @@ Page {
                             text: starlingClient.postalAddress || ""
                             color: Theme.primaryColor
                             wrapMode: Text.Wrap
+                        }
+
+                        Label {
+                            width: parent.width
+                            visible: page.editingAddress
+                            text: qsTr("Changing your address updates your Starling account details. Make sure the information is correct before saving.")
+                            color: Theme.secondaryColor
+                            wrapMode: Text.Wrap
+                            font.pixelSize: Theme.fontSizeSmall
                         }
 
                         TextField {
@@ -703,37 +751,12 @@ Page {
                             }
                         }
 
-                        Row {
+                        Button {
+                            visible: page.editingAddress
                             width: parent.width
-                            spacing: Theme.paddingSmall
-
-                            TextSwitch {
-                                id: editAddressSwitch
-                                width: parent.width - Theme.itemSizeLarge - Theme.paddingSmall
-                                text: qsTr("Edit address")
-                                checked: page.editingAddress
-                                enabled: page.canEditEmail() && !starlingClient.busy
-
-                                onCheckedChanged: {
-                                    page.editingAddress = checked
-                                    page.addressUpdateMessage = ""
-
-                                    if (checked) {
-                                        page.prefillAddressFields()
-
-//                                        if (fromDateField.text.length === 0)
-//                                            fromDateField.text = page.todayIsoDate()
-                                    }
-                                }
-                            }
-
-                            Button {
-                                width: Theme.itemSizeLarge
-                                visible: page.editingAddress
-                                enabled: page.canEditEmail() && !starlingClient.busy
-                                text: qsTr("Save")
-                                onClicked: page.saveAddress()
-                            }
+                            enabled: page.canEditEmail() && !starlingClient.busy
+                            text: qsTr("Save new postal address")
+                            onClicked: page.saveAddress()
                         }
                     }
 

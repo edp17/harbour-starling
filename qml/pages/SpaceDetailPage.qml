@@ -78,7 +78,7 @@ Page {
         var potBalance = page.space.balanceMinorUnits || 0
 
         if (minor <= 0) {
-            starlingClient.setStatus(qsTr("Enter a valid amount."))
+            page.pageError = qsTr("Enter a valid amount.")
             return
         }
 
@@ -172,11 +172,32 @@ Page {
                     width: parent.width - 2 * Theme.paddingMedium
                     spacing: Theme.paddingSmall
 
-                    Label {
+                    Item {
                         width: parent.width
-                        text: qsTr("Round-up")
-                        color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeMedium
+                        height: Math.max(roundUpTitleLabel.height, manageRoundUpButton.height)
+
+                        Label {
+                            id: roundUpTitleLabel
+                            anchors.left: parent.left
+                            anchors.right: manageRoundUpButton.left
+                            anchors.rightMargin: Theme.paddingMedium
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            text: qsTr("Round-up")
+                            color: Theme.highlightColor
+                            font.pixelSize: Theme.fontSizeMedium
+                            truncationMode: TruncationMode.Fade
+                        }
+
+                        Button {
+                            id: manageRoundUpButton
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            width: Theme.itemSizeHuge * 1.4
+                            text: qsTr("Manage")
+                            onClicked: pageStack.push(Qt.resolvedUrl("RoundUpPage.qml"))
+                        }
                     }
 
                     Label {
@@ -198,12 +219,6 @@ Page {
                                  && starlingClient.roundUp.roundUpGoalUid === page.space.spaceUid
                         text: qsTr("Multiplier: %1x").arg(starlingClient.roundUp.roundUpMultiplier || 1)
                         font.pixelSize: Theme.fontSizeSmall
-                    }
-
-                    Button {
-                        width: parent.width
-                        text: qsTr("Manage round-up")
-                        onClicked: pageStack.push(Qt.resolvedUrl("RoundUpPage.qml"))
                     }
                 }
             }

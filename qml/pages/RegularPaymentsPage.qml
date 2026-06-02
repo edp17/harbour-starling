@@ -48,7 +48,7 @@ Page {
             MenuItem {
                 enabled: page.readyForContent
                 visible: page.readyForContent
-                text: qsTr("Payment history")
+                text: qsTr("Regular payment history")
                 onClicked: pageStack.push(Qt.resolvedUrl("RegularPaymentsHistoryPage.qml"))
             }
         }
@@ -144,8 +144,8 @@ Page {
 
                         Label {
                             width: parent.width
-                            text: qsTr("Status: %1").arg(modelData.status || "-")
-                            color: modelData.status === "ACTIVE" ? Theme.highlightColor : Theme.secondaryColor
+                            text: qsTr("Status: %1").arg(modelData.displayStatus || modelData.status || "-")
+                            color: modelData.isActive === true ? Theme.highlightColor : Theme.secondaryColor
                             font.pixelSize: Theme.fontSizeSmall
                         }
                     }
@@ -244,8 +244,8 @@ Page {
 
                         Label {
                             width: parent.width
-                            text: qsTr("Status: %1").arg(modelData.status || "-")
-                            color: modelData.status === "ACTIVE" ? Theme.highlightColor : Theme.secondaryColor
+                            text: qsTr("Status: %1").arg(modelData.displayStatus || modelData.status || "-")
+                            color: modelData.isActive === true ? Theme.highlightColor : Theme.secondaryColor
                             font.pixelSize: Theme.fontSizeSmall
                         }
                     }

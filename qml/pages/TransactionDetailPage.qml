@@ -429,24 +429,38 @@ Page {
                     width: parent.width - 2 * Theme.paddingMedium
                     spacing: Theme.paddingSmall
 
-                    Label {
+                    Item {
                         width: parent.width
-                        text: qsTr("Attachments")
-                        color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeMedium
-                    }
+                        height: Math.max(attachmentsTitleLabel.height, uploadAttachmentSwitch.height)
 
-                    TextSwitch {
-                        id: uploadAttachmentSwitch
-                        width: parent.width
-                        text: qsTr("Upload attachment")
-                        checked: page.uploadingAttachment
-                        enabled: !starlingClient.busy
+                        Label {
+                            id: attachmentsTitleLabel
+                            anchors.left: parent.left
+                            anchors.right: uploadAttachmentSwitch.left
+                            anchors.rightMargin: Theme.paddingMedium
+                            anchors.verticalCenter: parent.verticalCenter
 
-                        onCheckedChanged: {
-                            page.uploadingAttachment = checked
-                            if (!checked) {
-                                page.attachmentError = ""
+                            text: qsTr("Attachments")
+                            color: Theme.highlightColor
+                            font.pixelSize: Theme.fontSizeMedium
+                            truncationMode: TruncationMode.Fade
+                        }
+
+                        TextSwitch {
+                            id: uploadAttachmentSwitch
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            width: Theme.itemSizeHuge * 1.4
+                            text: qsTr("Upload")
+                            checked: page.uploadingAttachment
+                            enabled: !starlingClient.busy
+
+                            onCheckedChanged: {
+                                page.uploadingAttachment = checked
+
+                                if (!checked)
+                                    page.attachmentError = ""
                             }
                         }
                     }
@@ -485,7 +499,7 @@ Page {
                                  && transactionData.feedItemUid
                                  && transactionData.feedItemUid.length > 0
                                  && attachmentPathField.text.trim().length > 0
-                        text: qsTr("Upload")
+                        text: qsTr("Upload attachment")
                         onClicked: {
                             page.attachmentError = ""
 
@@ -792,11 +806,39 @@ Page {
                     width: parent.width - 2 * Theme.paddingMedium
                     spacing: Theme.paddingMedium
 
-                    Label {
+                    Item {
                         width: parent.width
-                        text: qsTr("Category")
-                        color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeSmall
+                        height: Math.max(categoryTitleLabel.height, editCategorySwitch.height)
+
+                        Label {
+                            id: categoryTitleLabel
+                            anchors.left: parent.left
+                            anchors.right: editCategorySwitch.left
+                            anchors.rightMargin: Theme.paddingMedium
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            text: qsTr("Category")
+                            color: Theme.highlightColor
+                            font.pixelSize: Theme.fontSizeMedium
+                            truncationMode: TruncationMode.Fade
+                        }
+
+                        TextSwitch {
+                            id: editCategorySwitch
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            width: Theme.itemSizeHuge * 1.2
+                            text: qsTr("Edit")
+                            checked: page.editingCategory
+                            enabled: page.canEditCategory() && !starlingClient.busy
+
+                            onCheckedChanged: {
+                                page.editingCategory = checked
+                                if (checked)
+                                    page.selectedCategory = transactionData.category || "GENERAL"
+                            }
+                        }
                     }
 
                     Label {
@@ -805,34 +847,6 @@ Page {
                         text: transactionData.category || qsTr("No category")
                         color: Theme.primaryColor
                         wrapMode: Text.Wrap
-                    }
-
-                    Row {
-                        width: parent.width
-                        spacing: Theme.paddingSmall
-
-                        TextSwitch {
-                            id: editCategorySwitch
-                            width: parent.width - page.saveButtonWidth - Theme.paddingSmall
-                            text: qsTr("Edit category")
-                            checked: page.editingCategory
-                            enabled: page.canEditCategory() && !starlingClient.busy
-                            onCheckedChanged: {
-                                page.editingCategory = checked
-                                if (checked)
-                                    page.selectedCategory = transactionData.category || "GENERAL"
-                            }
-                        }
-
-                        Button {
-                            id: saveCategoryButton
-                            width: page.saveButtonWidth
-                            visible: page.editingCategory
-                            enabled: page.canEditCategory() && !starlingClient.busy
-                            text: qsTr("Save")
-                            onClicked: starlingClient.updateTransactionCategory(transactionData.feedItemUid,
-                                                                                page.selectedCategory)
-                        }
                     }
 
                     ComboBox {
@@ -856,6 +870,16 @@ Page {
                             if (currentIndex >= 0 && currentIndex < page.categoryOptions.length)
                                 page.selectedCategory = page.categoryOptions[currentIndex]
                         }
+                    }
+
+                    Button {
+                        id: saveCategoryButton
+                        width: parent.width
+                        visible: page.editingCategory
+                        enabled: page.canEditCategory() && !starlingClient.busy
+                        text: qsTr("Save new category")
+                        onClicked: starlingClient.updateTransactionCategory(transactionData.feedItemUid,
+                                                                            page.selectedCategory)
                     }
 
                     Label {
@@ -886,11 +910,39 @@ Page {
                     width: parent.width - 2 * Theme.paddingMedium
                     spacing: Theme.paddingMedium
 
-                    Label {
+                    Item {
                         width: parent.width
-                        text: qsTr("Note")
-                        color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeSmall
+                        height: Math.max(noteTitleLabel.height, editNoteSwitch.height)
+
+                        Label {
+                            id: noteTitleLabel
+                            anchors.left: parent.left
+                            anchors.right: editNoteSwitch.left
+                            anchors.rightMargin: Theme.paddingMedium
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            text: qsTr("Note")
+                            color: Theme.highlightColor
+                            font.pixelSize: Theme.fontSizeMedium
+                            truncationMode: TruncationMode.Fade
+                        }
+
+                        TextSwitch {
+                            id: editNoteSwitch
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            width: Theme.itemSizeHuge * 1.2
+                            text: qsTr("Edit")
+                            checked: page.editingNote
+                            enabled: page.canEditNote() && !starlingClient.busy
+
+                            onCheckedChanged: {
+                                page.editingNote = checked
+                                if (checked)
+                                    noteField.text = transactionData.userNote || ""
+                            }
+                        }
                     }
 
                     Label {
@@ -901,34 +953,6 @@ Page {
                         wrapMode: Text.Wrap
                     }
 
-                    Row {
-                        width: parent.width
-                        spacing: Theme.paddingSmall
-
-                        TextSwitch {
-                            id: editNoteSwitch
-                            width: parent.width - page.saveButtonWidth - Theme.paddingSmall
-                            text: qsTr("Edit note")
-                            checked: page.editingNote
-                            enabled: page.canEditNote() && !starlingClient.busy
-                            onCheckedChanged: {
-                                page.editingNote = checked
-                                if (checked)
-                                    noteField.text = transactionData.userNote || ""
-                            }
-                        }
-
-                        Button {
-                            id: saveNoteButton
-                            width: page.saveButtonWidth
-                            visible: page.editingNote
-                            enabled: page.canEditNote() && !starlingClient.busy
-                            text: qsTr("Save")
-                            onClicked: starlingClient.updateTransactionNote(transactionData.feedItemUid,
-                                                                            noteField.text)
-                        }
-                    }
-
                     TextArea {
                         id: noteField
                         width: parent.width
@@ -937,6 +961,16 @@ Page {
                         placeholderText: qsTr("Add a note...")
                         text: transactionData.userNote || ""
                         enabled: page.canEditNote() && !starlingClient.busy
+                    }
+
+                    Button {
+                        id: saveNoteButton
+                        width: parent.width
+                        visible: page.editingNote
+                        enabled: page.canEditNote() && !starlingClient.busy
+                        text: qsTr("Save new note")
+                        onClicked: starlingClient.updateTransactionNote(transactionData.feedItemUid,
+                                                                        noteField.text)
                     }
 
                     Label {

@@ -1419,6 +1419,11 @@ void StarlingClient::refreshDirectDebitPayments(const QString &mandateUid)
 
     QUrl url(QString::fromLatin1(BASE_URL) + path);
 
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("since"),
+                       QDate::currentDate().addYears(-1).toString(Qt::ISODate));
+    url.setQuery(query);
+
     QNetworkRequest req(url);
     req.setRawHeader("Authorization", QByteArray("Bearer ") + m_token.toUtf8());
 

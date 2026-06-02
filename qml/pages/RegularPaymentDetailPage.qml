@@ -179,8 +179,8 @@ Page {
 
                     Label {
                         width: parent.width
-                        text: qsTr("Status: %1").arg(page.valueOrDash(page.payment.status))
-                        color: page.isLiveStatus(page.payment.status) ? Theme.highlightColor : Theme.secondaryColor
+                        text: qsTr("Status: %1").arg(page.valueOrDash(page.payment.displayStatus || page.payment.status))
+                        color: page.payment.isActive === true ? Theme.highlightColor : Theme.secondaryColor
                     }
 
                     Label {
@@ -280,11 +280,48 @@ Page {
                     width: parent.width - 2 * Theme.paddingMedium
                     spacing: Theme.paddingSmall
 
-                    Label {
+                    Item {
                         width: parent.width
-                        text: qsTr("Payment history")
-                        color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeMedium
+                        height: Math.max(historyTitleLabel.height, showHistorySwitch.height)
+
+                        Label {
+                            id: historyTitleLabel
+                            anchors.left: parent.left
+                            anchors.right: showHistorySwitch.left
+                            anchors.rightMargin: Theme.paddingMedium
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            text: qsTr("Payment history")
+                            color: Theme.highlightColor
+                            font.pixelSize: Theme.fontSizeMedium
+                            truncationMode: TruncationMode.Fade
+                        }
+
+                        TextSwitch {
+                            id: showHistorySwitch
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            width: Theme.itemSizeHuge * 1.3
+                            text: qsTr("Show")
+                            checked: page.showPaymentHistory
+
+                            onCheckedChanged: {
+                                page.showPaymentHistory = checked
+
+                                if (checked && page.isDirectDebit
+                                        && page.payment.mandateUid
+                                        && page.payment.mandateUid.length > 0) {
+                                    starlingClient.refreshDirectDebitPayments(page.payment.mandateUid)
+                                }
+
+                                if (checked && page.isStandingOrder
+                                        && page.payment.paymentOrderUid
+                                        && page.payment.paymentOrderUid.length > 0) {
+                                    starlingClient.refreshStandingOrderPaymentHistory(page.payment.paymentOrderUid)
+                                }
+                            }
+                        }
                     }
 
                     Label {
@@ -295,28 +332,6 @@ Page {
                         color: Theme.secondaryColor
                         wrapMode: Text.Wrap
                         font.pixelSize: Theme.fontSizeSmall
-                    }
-
-                    TextSwitch {
-                        width: parent.width
-                        text: qsTr("Show payment history")
-                        checked: page.showPaymentHistory
-
-                        onCheckedChanged: {
-                            page.showPaymentHistory = checked
-
-                            if (checked && page.isDirectDebit
-                                    && page.payment.mandateUid
-                                    && page.payment.mandateUid.length > 0) {
-                                starlingClient.refreshDirectDebitPayments(page.payment.mandateUid)
-                            }
-
-                            if (checked && page.isStandingOrder
-                                    && page.payment.paymentOrderUid
-                                    && page.payment.paymentOrderUid.length > 0) {
-                                starlingClient.refreshStandingOrderPaymentHistory(page.payment.paymentOrderUid)
-                            }
-                        }
                     }
 
                     Label {
@@ -338,8 +353,8 @@ Page {
                                  && page.isDirectDebit
                                  && starlingClient.directDebitPayments.length === 0
                         text: starlingClient.busy
-                              ? qsTr("Loading Direct Debit payments...")
-                              : qsTr("No Direct Debit payments found.")
+                              ? qsTr("Loading payment history...")
+                              : qsTr("No payment history found.")
                         color: Theme.secondaryColor
                         wrapMode: Text.Wrap
                         font.pixelSize: Theme.fontSizeSmall
@@ -366,18 +381,6 @@ Page {
                             : []
                     )
                 }
-            }
-
-            RegularPaymentDetailSection {
-                visible: page.showPaymentHistory && page.isDirectDebit
-                title: qsTr("Payment history")
-                fields: starlingClient.directDebitPayments.length === 0
-                        ? [
-                            starlingClient.busy
-                                ? qsTr("Loading Direct Debit payments...")
-                                : qsTr("No Direct Debit payments found.")
-                          ]
-                        : []
             }
 
             Repeater {
@@ -428,9 +431,17 @@ Page {
 
                     Label {
                         width: parent.width
-                        text: page.isDirectDebit
-                              ? qsTr("Cancelling a Direct Debit stops future payments from this mandate.")
-                              : qsTr("Cancelling a Standing Order stops future scheduled payments.")
+                        visible: page.isDirectDebit
+                        text: qsTr("Cancelling a Direct Debit stops future payments from this mandate.")
+                        color: Theme.secondaryColor
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: page.isStandingOrder
+                        text: qsTr("Standing Order cancellation will be added when Starling makes the required API permission available.")
                         color: Theme.secondaryColor
                         wrapMode: Text.Wrap
                         font.pixelSize: Theme.fontSizeSmall
@@ -438,14 +449,10 @@ Page {
 
                     Button {
                         width: parent.width
-                        text: page.isDirectDebit ? qsTr("Cancel Direct Debit")
-                                                  : qsTr("Cancel Standing Order")
-                        onClicked: {
-                            if (page.isDirectDebit)
-                                page.cancelDirectDebit()
-                            else
-                                page.cancelStandingOrder()
-                        }
+                        visible: page.isDirectDebit
+                        enabled: !starlingClient.busy && page.isLiveStatus(page.payment.status)
+                        text: qsTr("Cancel Direct Debit")
+                        onClicked: page.cancelDirectDebit()
                     }
                 }
             }

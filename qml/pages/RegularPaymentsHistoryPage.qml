@@ -81,9 +81,9 @@ Page {
                     width: parent.width - 2 * x
                     height: ddColumn.height + 2 * Theme.paddingMedium
                     radius: Theme.paddingMedium
-                    color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
+                    color: Theme.rgba(Theme.highlightBackgroundColor, 0.12)
                     border.width: 1
-                    border.color: Theme.rgba(Theme.primaryColor, 0.15)
+                    border.color: Theme.rgba(Theme.primaryColor, 0.12)
 
                     Column {
                         id: ddColumn
@@ -160,9 +160,9 @@ Page {
                     width: parent.width - 2 * x
                     height: soColumn.height + 2 * Theme.paddingMedium
                     radius: Theme.paddingMedium
-                    color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
+                    color: Theme.rgba(Theme.highlightBackgroundColor, 0.12)
                     border.width: 1
-                    border.color: Theme.rgba(Theme.primaryColor, 0.15)
+                    border.color: Theme.rgba(Theme.primaryColor, 0.12)
 
                     Column {
                         id: soColumn
