@@ -80,6 +80,8 @@ class StarlingClient : public QObject
     Q_PROPERTY(bool roundUpLoaded READ roundUpLoaded NOTIFY roundUpChanged)
     Q_PROPERTY(QVariantMap accountHolderBasic READ accountHolderBasic NOTIFY accountHolderBasicChanged)
     Q_PROPERTY(QVariantMap currentAddress READ currentAddress NOTIFY accountChanged)
+    Q_PROPERTY(QString profileImagePath READ profileImagePath NOTIFY profileImageChanged)
+    Q_PROPERTY(bool profileImageAvailable READ profileImageAvailable NOTIFY profileImageChanged)
 
 public:
     explicit StarlingClient(QObject *parent = nullptr);
@@ -113,6 +115,7 @@ public:
     QString consentMessage() const;
     QString pinSettingsError() const;
     QString lastAttachmentPath() const;
+    QString profileImagePath() const;
     QVariantMap paymentDraft() const;
     QVariantMap transactionDetail() const;
     QVariantMap payeeDetail() const;
@@ -148,6 +151,7 @@ public:
     bool lockOnBackground() const;
     bool pinConfirmationPending() const;
     bool roundUpLoaded() const;
+    bool profileImageAvailable() const;
     void setToken(const QString &token);
     void setPayeeWriteToken(const QString &token);
     void setApiKeyId(const QString &value);
@@ -328,6 +332,7 @@ public:
                                                 const QString &postCode,
                                                 const QString &countryCode,
                                                 const QString &fromDate);
+    Q_INVOKABLE void refreshProfileImage();
 
 signals:
     void tokenChanged();
@@ -390,6 +395,7 @@ signals:
     void accountHolderBasicChanged();
     void accountHolderEmailUpdated(const QString &email);
     void accountHolderAddressUpdated();
+    void profileImageChanged();
 
 private:
     // helpers
@@ -513,6 +519,7 @@ private:
     QString buildIsoDateHeader() const;
     QString m_lastFeedExportCsvPath;
     QString m_lastAttachmentPath;
+    QString m_profileImagePath;
     bool m_busy = false;
     bool m_initializing = false;
     bool m_locked = false;
@@ -528,6 +535,7 @@ private:
     bool m_directDebitMandatesLoaded = false;
     bool m_standingOrdersLoaded = false;
     bool m_roundUpLoaded = false;
+    bool m_profileImageAvailable = false;
     int m_pendingRequests = 0;
     int m_startupDaysBack = 14;
     int m_autoLockMinutes = 2;

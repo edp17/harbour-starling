@@ -77,6 +77,114 @@ bool StarlingClient::localFileExists(const QString &filePath) const
     return info.exists() && info.isFile();
 }
 
+// Profile image
+QString StarlingClient::profileImagePath() const
+{
+    return m_profileImagePath;
+}
+
+bool StarlingClient::profileImageAvailable() const
+{
+    return m_profileImageAvailable;
+}
+
+void StarlingClient::refreshProfileImage()
+{
+    const QString accountHolderUid =
+            m_accountHolderBasic.value(QStringLiteral("accountHolderUid")).toString();
+
+    if (accountHolderUid.isEmpty()) {
+        setStatus(QStringLiteral("Account holder ID is missing."));
+        return;
+    }
+
+    const QString path =
+            QStringLiteral("/api/v2/account-holder/%1/profile-image")
+            .arg(accountHolderUid);
+
+    QUrl url(QString::fromLatin1(BASE_URL) + path);
+
+    QNetworkRequest req(url);
+    req.setRawHeader("Authorization", QByteArray("Bearer ") + m_token.toUtf8());
+
+    setStatus(QStringLiteral("Loading profile image..."));
+    beginRequest();
+
+    QNetworkReply *rep = m_nam.get(req);
+
+    connect(rep, &QNetworkReply::finished, this, [this, rep, accountHolderUid]() {
+        const QByteArray body = rep->readAll();
+        const int httpStatus =
+                rep->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+
+        if (rep->error() != QNetworkReply::NoError) {
+            m_profileImageAvailable = false;
+            m_profileImagePath.clear();
+            emit profileImageChanged();
+
+            if (httpStatus == 404) {
+                setStatus(QStringLiteral("No profile image found."));
+            } else {
+                qWarning() << "refreshProfileImage failed url=" << rep->url()
+                           << "status=" << httpStatus
+                           << "qtError=" << rep->errorString()
+                           << "body=" << QString::fromUtf8(body);
+
+                setStatus(QStringLiteral("Profile image unavailable."));
+            }
+
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        const QString cacheRoot =
+                QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+
+        QDir dir(cacheRoot);
+        if (!dir.exists())
+            dir.mkpath(QStringLiteral("."));
+
+        QString extension = QStringLiteral(".jpg");
+        const QString contentType =
+                rep->header(QNetworkRequest::ContentTypeHeader).toString();
+
+        if (contentType.contains(QStringLiteral("png")))
+            extension = QStringLiteral(".png");
+        else if (contentType.contains(QStringLiteral("webp")))
+            extension = QStringLiteral(".webp");
+
+        const QString filePath =
+                dir.filePath(QStringLiteral("profile-image-%1%2")
+                             .arg(accountHolderUid.left(8))
+                             .arg(extension));
+
+        QFile file(filePath);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            m_profileImageAvailable = false;
+            m_profileImagePath.clear();
+            emit profileImageChanged();
+
+            setStatus(QStringLiteral("Could not save profile image."));
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        file.write(body);
+        file.close();
+
+        m_profileImagePath = filePath;
+        m_profileImageAvailable = true;
+        emit profileImageChanged();
+
+        setStatus(QStringLiteral("Profile image loaded."));
+
+        rep->deleteLater();
+        endRequest();
+    });
+}
+
 // Address
 QVariantMap StarlingClient::currentAddress() const
 {

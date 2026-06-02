@@ -156,6 +156,52 @@ Page {
 
             Rectangle {
                 x: Theme.horizontalPageMargin
+                width: parent.width - 2 * x
+                height: profileColumn.height + 2 * Theme.paddingMedium
+
+                radius: Theme.paddingMedium
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
+                border.width: 1
+                border.color: Theme.rgba(Theme.primaryColor, 0.15)
+
+                Column {
+                    id: profileColumn
+                    x: Theme.paddingMedium
+                    y: Theme.paddingMedium
+                    width: parent.width - 2 * Theme.paddingMedium
+                    spacing: Theme.paddingMedium
+
+                    Label {
+                        width: parent.width
+                        text: qsTr("Profile image")
+                        color: Theme.highlightColor
+                        font.pixelSize: Theme.fontSizeMedium
+                    }
+
+                    Image {
+                        width: Math.min(parent.width, Theme.itemSizeHuge * 2)
+                        height: width
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        visible: starlingClient.profileImageAvailable
+                        source: starlingClient.profileImageAvailable
+                                ? "file://" + starlingClient.profileImagePath
+                                : ""
+                        fillMode: Image.PreserveAspectCrop
+                    }
+
+                    Label {
+                        width: parent.width
+                        visible: !starlingClient.profileImageAvailable
+                        text: qsTr("No profile image found.")
+                        color: Theme.secondaryColor
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+                }
+            }
+
+            Rectangle {
+                x: Theme.horizontalPageMargin
                 width: parent.width - Theme.horizontalPageMargin * 2
                 height: offlineColumn.height + Theme.paddingLarge * 2
                 visible: !page.isOnline
@@ -666,6 +712,11 @@ Page {
 
             page.addressUpdateMessage =
                     qsTr("Your address update has been submitted. Starling may review or confirm the change before it fully appears on your account.")
+        }
+
+        onAccountHolderBasicChanged: {
+            if ((starlingClient.accountHolderBasic.accountHolderUid || "").length > 0)
+                starlingClient.refreshProfileImage()
         }
     }
 
