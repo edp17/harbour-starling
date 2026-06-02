@@ -77,6 +77,123 @@ bool StarlingClient::localFileExists(const QString &filePath) const
     return info.exists() && info.isFile();
 }
 
+// Payee Account
+QVariantList StarlingClient::payeeAccountPayments() const
+{
+    return m_payeeAccountPayments;
+}
+
+void StarlingClient::refreshPayeeAccountPayments(const QString &payeeUid,
+                                                 const QString &payeeAccountUid)
+{
+    const QString trimmedPayeeUid = payeeUid.trimmed();
+    const QString trimmedAccountUid = payeeAccountUid.trimmed();
+
+    if (trimmedPayeeUid.isEmpty() || trimmedAccountUid.isEmpty()) {
+        setStatus(QStringLiteral("Payee account details are missing."));
+        return;
+    }
+
+    m_payeeAccountPayments.clear();
+    emit payeeAccountPaymentsChanged();
+
+    const QString path =
+            QStringLiteral("/api/v2/payees/%1/account/%2/payments")
+            .arg(trimmedPayeeUid)
+            .arg(trimmedAccountUid);
+
+    QUrl url(QString::fromLatin1(BASE_URL) + path);
+
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("since"),
+                       QDate::currentDate().addYears(-1).toString(Qt::ISODate));
+    url.setQuery(query);
+
+    QNetworkRequest req(url);
+    req.setRawHeader("Authorization", QByteArray("Bearer ") + m_token.toUtf8());
+
+    setStatus(QStringLiteral("Loading payee payment history..."));
+    beginRequest();
+
+    QNetworkReply *rep = m_nam.get(req);
+
+    connect(rep, &QNetworkReply::finished, this, [this, rep]() {
+        const QByteArray body = rep->readAll();
+        const int httpStatus =
+                rep->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+
+        if (rep->error() != QNetworkReply::NoError) {
+            qWarning() << "refreshPayeeAccountPayments failed url=" << rep->url()
+                       << "status=" << httpStatus
+                       << "qtError=" << rep->errorString()
+                       << "body=" << QString::fromUtf8(body);
+
+            m_payeeAccountPayments.clear();
+            emit payeeAccountPaymentsChanged();
+
+            setStatus(QStringLiteral("Payee payment history unavailable."));
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QJsonArray items = root.value(QStringLiteral("payments")).toArray();
+        if (items.isEmpty())
+            items = root.value(QStringLiteral("paymentOrders")).toArray();
+
+        QVariantList rows;
+
+        for (int i = 0; i < items.size(); ++i) {
+            const QJsonObject item = items.at(i).toObject();
+
+            const QJsonObject amount = item.value(QStringLiteral("paymentAmount")).toObject();
+            const QString currency =
+                    amount.value(QStringLiteral("currency")).toString(QStringLiteral("GBP"));
+            const qint64 minor =
+                    amount.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
+
+            QVariantMap row;
+            row.insert(QStringLiteral("paymentUid"),
+                       item.value(QStringLiteral("paymentUid")).toString(
+                           item.value(QStringLiteral("uid")).toString()));
+            row.insert(QStringLiteral("date"),
+                       formatIsoDateTime(item.value(QStringLiteral("createdAt")).toString(
+                           item.value(QStringLiteral("paymentDate")).toString(
+                               item.value(QStringLiteral("date")).toString()))));
+            row.insert(QStringLiteral("amount"),
+                       minor > 0 ? formatMinorUnits(minor, currency) : QString());
+            row.insert(QStringLiteral("status"), item.value(QStringLiteral("status")).toString());
+            row.insert(QStringLiteral("reference"), item.value(QStringLiteral("reference")).toString());
+            row.insert(QStringLiteral("spendingCategory"), item.value(QStringLiteral("spendingCategory")).toString());
+            row.insert(QStringLiteral("rowType"), QStringLiteral("transaction"));
+            row.insert(QStringLiteral("title"), item.value(QStringLiteral("reference")).toString(QStringLiteral("Payment")));
+            row.insert(QStringLiteral("direction"), QStringLiteral("OUT"));
+            row.insert(QStringLiteral("currency"), currency);
+            row.insert(QStringLiteral("amountValue"), static_cast<qint64>(minor));
+            row.insert(QStringLiteral("category"), item.value(QStringLiteral("spendingCategory")).toString());
+            row.insert(QStringLiteral("dateRaw"), item.value(QStringLiteral("createdAt")).toString());
+            row.insert(QStringLiteral("feedItemUid"), item.value(QStringLiteral("feedItemUid")).toString());
+            row.insert(QStringLiteral("userNote"), item.value(QStringLiteral("userNote")).toString());
+            row.insert(QStringLiteral("paymentUid"), item.value(QStringLiteral("paymentUid")).toString());
+
+            rows.append(row);
+        }
+
+        m_payeeAccountPayments = rows;
+        emit payeeAccountPaymentsChanged();
+
+        setStatus(rows.isEmpty()
+                  ? QStringLiteral("No payee payments found.")
+                  : QStringLiteral("Loaded %1 payee payment(s).").arg(rows.size()));
+
+        rep->deleteLater();
+        endRequest();
+    });
+}
+
 // Profile image
 bool StarlingClient::isSupportedProfileImageFile(const QString &filePath) const
 {
