@@ -98,6 +98,23 @@ Page {
                 onClicked: pageStack.push(Qt.resolvedUrl("CardsPage.qml"))
             }
             MenuItem {
+                enabled: page.readyForContent
+                visible: page.readyForContent
+                text: qsTr("Regular payments")
+                onClicked: pageStack.push(Qt.resolvedUrl("RegularPaymentsPage.qml"))
+            }
+            MenuItem {
+                text: qsTr("Transactions")
+                visible: page.unlockedReady && page.hasMainToken
+                onClicked: pageStack.push(Qt.resolvedUrl("TransactionsPage.qml"))
+            }
+            MenuItem {
+                enabled: page.readyForContent
+                visible: page.readyForContent
+                text: qsTr("Spaces")
+                onClicked: pageStack.push(Qt.resolvedUrl("SpacesPage.qml"))
+            }
+            MenuItem {
                 text: qsTr("Settings")
                 onClicked: pageStack.push(Qt.resolvedUrl("SettingsPage.qml"))
             }

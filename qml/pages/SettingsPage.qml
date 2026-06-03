@@ -169,6 +169,7 @@ Page {
                         wrapMode: Text.Wrap
                         color: Theme.secondaryHighlightColor
                         text: qsTr("All sensitive data, including tokens and keys, is stored securely using Sailfish Secrets and protected by your app PIN.")
+                        font.pixelSize: Theme.fontSizeExtraSmall
                     }
                 }
             }
@@ -270,7 +271,7 @@ Page {
                         text: qsTr("An app PIN protects access to the app and is required to unlock it.")
                         wrapMode: Text.Wrap
                         color: Theme.secondaryHighlightColor
-                        font.pixelSize: Theme.fontSizeSmall
+                        font.pixelSize: Theme.fontSizeExtraSmall
                     }
 
                     Label {
@@ -279,7 +280,7 @@ Page {
                         text: qsTr("To change the app PIN, enter the current PIN first.")
                         wrapMode: Text.Wrap
                         color: Theme.secondaryColor
-                        font.pixelSize: Theme.fontSizeSmall
+                        font.pixelSize: Theme.fontSizeExtraSmall
                     }
 
                     TextField {
@@ -367,6 +368,7 @@ Page {
                         wrapMode: Text.Wrap
                         color: Theme.secondaryHighlightColor
                         text: qsTr("Manage authentication tokens used to access your Starling account and perform actions such as loading data or submitting payments.")
+                        font.pixelSize: Theme.fontSizeExtraSmall
                     }
 
                     Item {
@@ -448,7 +450,7 @@ Page {
                                 color: Theme.primaryColor
                                 selectionColor: Theme.highlightColor
                                 selectedTextColor: Theme.primaryColor
-                                font.pixelSize: Theme.fontSizeMedium
+                                font.pixelSize: Theme.fontSizeExtraSmall
                                 echoMode: TextInput.Password
                                 clip: true
                             }
@@ -526,7 +528,7 @@ Page {
                                 color: Theme.primaryColor
                                 selectionColor: Theme.highlightColor
                                 selectedTextColor: Theme.primaryColor
-                                font.pixelSize: Theme.fontSizeMedium
+                                font.pixelSize: Theme.fontSizeExtraSmall
                                 echoMode: TextInput.Password
                                 clip: true
                             }
@@ -630,7 +632,7 @@ Page {
                             color: Theme.primaryColor
                             selectionColor: Theme.highlightColor
                             selectedTextColor: Theme.primaryColor
-                            font.pixelSize: Theme.fontSizeMedium
+                            font.pixelSize: Theme.fontSizeExtraSmall
                             clip: true
                         }
                     }
@@ -704,7 +706,7 @@ Page {
                             color: Theme.primaryColor
                             selectionColor: Theme.highlightColor
                             selectedTextColor: Theme.primaryColor
-                            font.pixelSize: Theme.fontSizeSmall
+                            font.pixelSize: Theme.fontSizeExtraSmall
                             wrapMode: TextEdit.Wrap
                             clip: true
                         }
@@ -784,7 +786,7 @@ Page {
                         width: parent.width
                         wrapMode: Text.Wrap
                         color: Theme.secondaryColor
-                        font.pixelSize: Theme.fontSizeSmall
+                        font.pixelSize: Theme.fontSizeExtraSmall
                         text: qsTr("Deletes all locally stored data, including tokens, API keys, physical card details and app PIN.")
                     }
 

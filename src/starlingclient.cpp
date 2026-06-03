@@ -6,6 +6,9 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QFile>
+#include <QDir>
+#include <QStandardPaths>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QUrlQuery>
@@ -22,6 +25,9 @@
 #include <openssl/pem.h>
 #include <openssl/bio.h>
 #include <openssl/err.h>
+#include <QFileInfo>
+#include <QMimeDatabase>
+#include <QMimeType>
 
 static const char *BASE_URL = "https://api.starlingbank.com";
 
@@ -63,6 +69,2156 @@ StarlingClient::StarlingClient(QObject *parent)
             refreshAll(m_startupDaysBack > 0 ? m_startupDaysBack : 14);
         }
     });
+}
+
+bool StarlingClient::localFileExists(const QString &filePath) const
+{
+    const QFileInfo info(filePath.trimmed());
+    return info.exists() && info.isFile();
+}
+
+// Payee Account
+QString StarlingClient::payeeImagePath() const
+{
+    return m_payeeImagePath;
+}
+
+bool StarlingClient::payeeImageAvailable() const
+{
+    return m_payeeImageAvailable;
+}
+
+void StarlingClient::refreshPayeeImage(const QString &payeeUid)
+{
+    const QString trimmedPayeeUid = payeeUid.trimmed();
+
+    if (trimmedPayeeUid.isEmpty()) {
+        m_payeeImageAvailable = false;
+        m_payeeImagePath.clear();
+        emit payeeImageChanged();
+        setStatus(QStringLiteral("Payee ID is missing."));
+        return;
+    }
+
+    const QString path =
+            QStringLiteral("/api/v2/payees/%1/image")
+            .arg(trimmedPayeeUid);
+
+    QUrl url(QString::fromLatin1(BASE_URL) + path);
+
+    QNetworkRequest req(url);
+    req.setRawHeader("Authorization", QByteArray("Bearer ") + m_token.toUtf8());
+
+    setStatus(QStringLiteral("Loading payee image..."));
+    beginRequest();
+
+    QNetworkReply *rep = m_nam.get(req);
+
+    connect(rep, &QNetworkReply::finished, this, [this, rep, trimmedPayeeUid]() {
+        const QByteArray body = rep->readAll();
+        const int httpStatus =
+                rep->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+
+        if (rep->error() != QNetworkReply::NoError) {
+            m_payeeImageAvailable = false;
+            m_payeeImagePath.clear();
+            emit payeeImageChanged();
+
+            if (httpStatus == 404) {
+                setStatus(QStringLiteral("No payee image found."));
+            } else {
+                qWarning() << "refreshPayeeImage failed url=" << rep->url()
+                           << "status=" << httpStatus
+                           << "qtError=" << rep->errorString()
+                           << "body=" << QString::fromUtf8(body);
+
+                setStatus(QStringLiteral("Payee image unavailable."));
+            }
+
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        const QString cacheRoot =
+                QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+
+        QDir dir(cacheRoot);
+        if (!dir.exists())
+            dir.mkpath(QStringLiteral("."));
+
+        QString extension = QStringLiteral(".jpg");
+        const QString contentType =
+                rep->header(QNetworkRequest::ContentTypeHeader).toString();
+
+        if (contentType.contains(QStringLiteral("png")))
+            extension = QStringLiteral(".png");
+        else if (contentType.contains(QStringLiteral("webp")))
+            extension = QStringLiteral(".webp");
+        else if (contentType.contains(QStringLiteral("jpeg")) || contentType.contains(QStringLiteral("jpg")))
+            extension = QStringLiteral(".jpg");
+
+        const QString filePath =
+                dir.filePath(QStringLiteral("payee-image-%1%2")
+                             .arg(trimmedPayeeUid.left(8))
+                             .arg(extension));
+
+        QFile file(filePath);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            m_payeeImageAvailable = false;
+            m_payeeImagePath.clear();
+            emit payeeImageChanged();
+
+            setStatus(QStringLiteral("Could not save payee image."));
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        file.write(body);
+        file.close();
+
+        m_payeeImagePath = filePath;
+        m_payeeImageAvailable = true;
+        emit payeeImageChanged();
+
+        setStatus(QStringLiteral("Payee image loaded."));
+
+        rep->deleteLater();
+        endRequest();
+    });
+}
+
+QVariantList StarlingClient::payeeAccountScheduledPayments() const
+{
+    return m_payeeAccountScheduledPayments;
+}
+
+QVariantList StarlingClient::payeeAccountPayments() const
+{
+    return m_payeeAccountPayments;
+}
+
+void StarlingClient::refreshPayeeAccountScheduledPayments(const QString &payeeUid,
+                                                          const QString &payeeAccountUid)
+{
+    const QString trimmedPayeeUid = payeeUid.trimmed();
+    const QString trimmedAccountUid = payeeAccountUid.trimmed();
+
+    if (trimmedPayeeUid.isEmpty() || trimmedAccountUid.isEmpty()) {
+        setStatus(QStringLiteral("Payee account details are missing."));
+        return;
+    }
+
+    m_payeeAccountScheduledPayments.clear();
+    emit payeeAccountScheduledPaymentsChanged();
+
+    const QString path =
+            QStringLiteral("/api/v2/payees/%1/account/%2/scheduled-payments")
+            .arg(trimmedPayeeUid)
+            .arg(trimmedAccountUid);
+
+    setStatus(QStringLiteral("Loading scheduled payments..."));
+
+    getJson(path, [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QJsonArray items = root.value(QStringLiteral("scheduledPayments")).toArray();
+
+        if (items.isEmpty())
+            items = root.value(QStringLiteral("payments")).toArray();
+
+        if (items.isEmpty())
+            items = root.value(QStringLiteral("paymentOrders")).toArray();
+
+        QVariantList rows;
+
+        for (int i = 0; i < items.size(); ++i) {
+            const QJsonObject item = items.at(i).toObject();
+
+            const QJsonObject amount = item.value(QStringLiteral("amount")).toObject();
+            const QJsonObject paymentAmount = item.value(QStringLiteral("paymentAmount")).toObject();
+            const QJsonObject nextPaymentAmount = item.value(QStringLiteral("nextPaymentAmount")).toObject();
+
+            const QJsonObject money = !nextPaymentAmount.isEmpty()
+                    ? nextPaymentAmount
+                    : (!amount.isEmpty() ? amount : paymentAmount);
+
+            const QString currency =
+                    money.value(QStringLiteral("currency")).toString(QStringLiteral("GBP"));
+            const qint64 minor =
+                    money.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
+
+            QVariantMap row;
+
+            row.insert(QStringLiteral("paymentOrderUid"),
+                       item.value(QStringLiteral("paymentOrderUid")).toString(
+                           item.value(QStringLiteral("uid")).toString()));
+
+            const QString nextPaymentDate =
+                    item.value(QStringLiteral("nextDate")).toString(
+                        item.value(QStringLiteral("paymentDate")).toString(
+                            item.value(QStringLiteral("scheduledDate")).toString(
+                                item.value(QStringLiteral("date")).toString())));
+
+            if (nextPaymentDate.isEmpty())
+                continue;
+
+            row.insert(QStringLiteral("date"), nextPaymentDate);
+
+            row.insert(QStringLiteral("createdAt"),
+                       formatIsoDateTime(item.value(QStringLiteral("createdAt")).toString()));
+
+            row.insert(QStringLiteral("amount"),
+                       minor > 0 ? formatMinorUnits(minor, currency) : QString());
+
+            row.insert(QStringLiteral("reference"),
+                       item.value(QStringLiteral("reference")).toString());
+
+            row.insert(QStringLiteral("status"),
+                       item.value(QStringLiteral("status")).toString());
+
+            const QJsonObject recurrence =
+                    item.value(QStringLiteral("recurrenceRule")).toObject();
+
+            row.insert(QStringLiteral("frequency"),
+                       recurrence.value(QStringLiteral("frequency")).toString(
+                           item.value(QStringLiteral("frequency")).toString()));
+
+            row.insert(QStringLiteral("interval"),
+                       recurrence.value(QStringLiteral("interval")).toVariant().toString());
+
+            row.insert(QStringLiteral("count"),
+                       recurrence.value(QStringLiteral("count")).toVariant().toString());
+
+            row.insert(QStringLiteral("untilDate"),
+                       recurrence.value(QStringLiteral("untilDate")).toString());
+
+            row.insert(QStringLiteral("paymentType"),
+                       item.value(QStringLiteral("paymentType")).toString());
+
+            row.insert(QStringLiteral("spendingCategory"),
+                       item.value(QStringLiteral("spendingCategory")).toString());
+
+            rows.append(row);
+        }
+
+        m_payeeAccountScheduledPayments = rows;
+        emit payeeAccountScheduledPaymentsChanged();
+
+        setStatus(rows.isEmpty()
+                  ? QStringLiteral("No scheduled payments found.")
+                  : QStringLiteral("Loaded %1 scheduled payment(s).").arg(rows.size()));
+    });
+}
+
+void StarlingClient::refreshPayeeAccountPayments(const QString &payeeUid,
+                                                 const QString &payeeAccountUid)
+{
+    const QString trimmedPayeeUid = payeeUid.trimmed();
+    const QString trimmedAccountUid = payeeAccountUid.trimmed();
+
+    if (trimmedPayeeUid.isEmpty() || trimmedAccountUid.isEmpty()) {
+        setStatus(QStringLiteral("Payee account details are missing."));
+        return;
+    }
+
+    m_payeeAccountPayments.clear();
+    emit payeeAccountPaymentsChanged();
+
+    const QString path =
+            QStringLiteral("/api/v2/payees/%1/account/%2/payments")
+            .arg(trimmedPayeeUid)
+            .arg(trimmedAccountUid);
+
+    QUrl url(QString::fromLatin1(BASE_URL) + path);
+
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("since"),
+                       QDate::currentDate().addYears(-1).toString(Qt::ISODate));
+    url.setQuery(query);
+
+    QNetworkRequest req(url);
+    req.setRawHeader("Authorization", QByteArray("Bearer ") + m_token.toUtf8());
+
+    setStatus(QStringLiteral("Loading payee payment history..."));
+    beginRequest();
+
+    QNetworkReply *rep = m_nam.get(req);
+
+    connect(rep, &QNetworkReply::finished, this, [this, rep]() {
+        const QByteArray body = rep->readAll();
+        const int httpStatus =
+                rep->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+
+        if (rep->error() != QNetworkReply::NoError) {
+            qWarning() << "refreshPayeeAccountPayments failed url=" << rep->url()
+                       << "status=" << httpStatus
+                       << "qtError=" << rep->errorString()
+                       << "body=" << QString::fromUtf8(body);
+
+            m_payeeAccountPayments.clear();
+            emit payeeAccountPaymentsChanged();
+
+            setStatus(QStringLiteral("Payee payment history unavailable."));
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QJsonArray items = root.value(QStringLiteral("payments")).toArray();
+        if (items.isEmpty())
+            items = root.value(QStringLiteral("paymentOrders")).toArray();
+
+        QVariantList rows;
+
+        for (int i = 0; i < items.size(); ++i) {
+            const QJsonObject item = items.at(i).toObject();
+
+            const QJsonObject amount = item.value(QStringLiteral("paymentAmount")).toObject();
+            const QString currency =
+                    amount.value(QStringLiteral("currency")).toString(QStringLiteral("GBP"));
+            const qint64 minor =
+                    amount.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
+
+            QVariantMap row;
+            row.insert(QStringLiteral("paymentUid"),
+                       item.value(QStringLiteral("paymentUid")).toString(
+                           item.value(QStringLiteral("uid")).toString()));
+            row.insert(QStringLiteral("date"),
+                       formatIsoDateTime(item.value(QStringLiteral("createdAt")).toString(
+                           item.value(QStringLiteral("paymentDate")).toString(
+                               item.value(QStringLiteral("date")).toString()))));
+            row.insert(QStringLiteral("amount"),
+                       minor > 0 ? formatMinorUnits(minor, currency) : QString());
+            row.insert(QStringLiteral("status"), item.value(QStringLiteral("status")).toString());
+            row.insert(QStringLiteral("reference"), item.value(QStringLiteral("reference")).toString());
+            row.insert(QStringLiteral("spendingCategory"), item.value(QStringLiteral("spendingCategory")).toString());
+            row.insert(QStringLiteral("rowType"), QStringLiteral("transaction"));
+            row.insert(QStringLiteral("title"), item.value(QStringLiteral("reference")).toString(QStringLiteral("Payment")));
+            row.insert(QStringLiteral("direction"), QStringLiteral("OUT"));
+            row.insert(QStringLiteral("currency"), currency);
+            row.insert(QStringLiteral("amountValue"), static_cast<qint64>(minor));
+            row.insert(QStringLiteral("category"), item.value(QStringLiteral("spendingCategory")).toString());
+            row.insert(QStringLiteral("dateRaw"), item.value(QStringLiteral("createdAt")).toString());
+            row.insert(QStringLiteral("feedItemUid"), item.value(QStringLiteral("feedItemUid")).toString());
+            row.insert(QStringLiteral("userNote"), item.value(QStringLiteral("userNote")).toString());
+            row.insert(QStringLiteral("paymentUid"), item.value(QStringLiteral("paymentUid")).toString());
+
+            rows.append(row);
+        }
+
+        m_payeeAccountPayments = rows;
+        emit payeeAccountPaymentsChanged();
+
+        setStatus(rows.isEmpty()
+                  ? QStringLiteral("No payee payments found.")
+                  : QStringLiteral("Loaded %1 payee payment(s).").arg(rows.size()));
+
+        rep->deleteLater();
+        endRequest();
+    });
+}
+
+// Profile image
+bool StarlingClient::isSupportedProfileImageFile(const QString &filePath) const
+{
+    QFileInfo info(filePath.trimmed());
+    if (!info.exists() || !info.isFile())
+        return false;
+
+    QMimeDatabase mimeDb;
+    const QMimeType mime = mimeDb.mimeTypeForFile(info);
+    const QString mimeName = mime.isValid()
+            ? mime.name()
+            : QStringLiteral("application/octet-stream");
+
+    return mimeName.startsWith(QStringLiteral("image/"));
+}
+
+QString StarlingClient::profileImagePath() const
+{
+    return m_profileImagePath;
+}
+
+bool StarlingClient::profileImageAvailable() const
+{
+    return m_profileImageAvailable;
+}
+
+void StarlingClient::refreshProfileImage()
+{
+    const QString accountHolderUid =
+            m_accountHolderBasic.value(QStringLiteral("accountHolderUid")).toString();
+
+    if (accountHolderUid.isEmpty()) {
+        setStatus(QStringLiteral("Account holder ID is missing."));
+        return;
+    }
+
+    const QString path =
+            QStringLiteral("/api/v2/account-holder/%1/profile-image")
+            .arg(accountHolderUid);
+
+    QUrl url(QString::fromLatin1(BASE_URL) + path);
+
+    QNetworkRequest req(url);
+    req.setRawHeader("Authorization", QByteArray("Bearer ") + m_token.toUtf8());
+
+    setStatus(QStringLiteral("Loading profile image..."));
+    beginRequest();
+
+    QNetworkReply *rep = m_nam.get(req);
+
+    connect(rep, &QNetworkReply::finished, this, [this, rep, accountHolderUid]() {
+        const QByteArray body = rep->readAll();
+        const int httpStatus =
+                rep->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+
+        if (rep->error() != QNetworkReply::NoError) {
+            m_profileImageAvailable = false;
+            m_profileImagePath.clear();
+            emit profileImageChanged();
+
+            if (httpStatus == 404) {
+                setStatus(QStringLiteral("No profile image found."));
+            } else {
+                qWarning() << "refreshProfileImage failed url=" << rep->url()
+                           << "status=" << httpStatus
+                           << "qtError=" << rep->errorString()
+                           << "body=" << QString::fromUtf8(body);
+
+                setStatus(QStringLiteral("Profile image unavailable."));
+            }
+
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        const QString cacheRoot =
+                QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+
+        QDir dir(cacheRoot);
+        if (!dir.exists())
+            dir.mkpath(QStringLiteral("."));
+
+        QString extension = QStringLiteral(".jpg");
+        const QString contentType =
+                rep->header(QNetworkRequest::ContentTypeHeader).toString();
+
+        if (contentType.contains(QStringLiteral("png")))
+            extension = QStringLiteral(".png");
+        else if (contentType.contains(QStringLiteral("webp")))
+            extension = QStringLiteral(".webp");
+
+        const QString filePath =
+                dir.filePath(QStringLiteral("profile-image-%1%2")
+                             .arg(accountHolderUid.left(8))
+                             .arg(extension));
+
+        QFile file(filePath);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            m_profileImageAvailable = false;
+            m_profileImagePath.clear();
+            emit profileImageChanged();
+
+            setStatus(QStringLiteral("Could not save profile image."));
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        file.write(body);
+        file.close();
+
+        m_profileImagePath = filePath;
+        m_profileImageAvailable = true;
+        emit profileImageChanged();
+
+        setStatus(QStringLiteral("Profile image loaded."));
+
+        rep->deleteLater();
+        endRequest();
+    });
+}
+
+void StarlingClient::updateProfileImage(const QString &filePath)
+{
+    const QString accountHolderUid =
+            m_accountHolderBasic.value(QStringLiteral("accountHolderUid")).toString();
+
+    if (accountHolderUid.isEmpty()) {
+        setStatus(QStringLiteral("Account holder ID is missing."));
+        return;
+    }
+
+    const QString trimmedFilePath = filePath.trimmed();
+
+    QFileInfo info(trimmedFilePath);
+    if (!info.exists() || !info.isFile()) {
+        setStatus(QStringLiteral("Profile image file not found."));
+        return;
+    }
+
+    QMimeDatabase mimeDb;
+    const QMimeType mime = mimeDb.mimeTypeForFile(info);
+    const QString mimeName = mime.isValid()
+            ? mime.name()
+            : QStringLiteral("application/octet-stream");
+
+    if (!mimeName.startsWith(QStringLiteral("image/"))) {
+        setStatus(QStringLiteral("Only image files can be used as a profile image."));
+        return;
+    }
+
+    QFile file(info.absoluteFilePath());
+    if (!file.open(QIODevice::ReadOnly)) {
+        setStatus(QStringLiteral("Could not open profile image."));
+        return;
+    }
+
+    const QByteArray body = file.readAll();
+    file.close();
+
+    const QString path =
+            QStringLiteral("/api/v2/account-holder/%1/profile-image")
+            .arg(accountHolderUid);
+
+    QUrl url(QString::fromLatin1(BASE_URL) + path);
+
+    QNetworkRequest req(url);
+    req.setRawHeader("Authorization", QByteArray("Bearer ") + m_token.toUtf8());
+    req.setHeader(QNetworkRequest::ContentTypeHeader, QVariant(mimeName));
+
+    setStatus(QStringLiteral("Updating profile image..."));
+    beginRequest();
+
+    QNetworkReply *rep = m_nam.put(req, body);
+
+    connect(rep, &QNetworkReply::finished, this, [this, rep]() {
+        const QByteArray responseBody = rep->readAll();
+        const int httpStatus =
+                rep->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+
+        if (rep->error() != QNetworkReply::NoError) {
+            qWarning() << "updateProfileImage failed url=" << rep->url()
+                       << "status=" << httpStatus
+                       << "qtError=" << rep->errorString()
+                       << "body=" << QString::fromUtf8(responseBody);
+
+            setStatus(QStringLiteral("Profile image update failed: %1").arg(rep->errorString()));
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        setStatus(QStringLiteral("Profile image updated."));
+        refreshProfileImage();
+        touchLastUpdated();
+        emit profileImageUpdated();
+
+        rep->deleteLater();
+        endRequest();
+    });
+}
+
+void StarlingClient::deleteProfileImage()
+{
+    const QString accountHolderUid =
+            m_accountHolderBasic.value(QStringLiteral("accountHolderUid")).toString();
+
+    if (accountHolderUid.isEmpty()) {
+        setStatus(QStringLiteral("Account holder ID is missing."));
+        return;
+    }
+
+    const QString path =
+            QStringLiteral("/api/v2/account-holder/%1/profile-image")
+            .arg(accountHolderUid);
+
+    setStatus(QStringLiteral("Deleting profile image..."));
+
+    sendDeleteWithToken(path, m_token, [this](const QByteArray &) {
+        m_profileImageAvailable = false;
+        m_profileImagePath.clear();
+        emit profileImageChanged();
+
+        setStatus(QStringLiteral("Profile image deleted."));
+        touchLastUpdated();
+        emit profileImageDeleted();
+    });
+}
+
+// Address
+QVariantMap StarlingClient::currentAddress() const
+{
+    return m_currentAddress;
+}
+
+void StarlingClient::updateAccountHolderAddress(const QString &line1,
+                                                const QString &line2,
+                                                const QString &line3,
+                                                const QString &postTown,
+                                                const QString &postCode,
+                                                const QString &countryCode,
+                                                const QString &fromDate)
+{
+    const QString trimmedLine1 = line1.trimmed();
+    const QString trimmedPostTown = postTown.trimmed();
+    const QString trimmedPostCode = postCode.trimmed();
+    const QString trimmedCountryCode = countryCode.trimmed().toUpper();
+    const QString trimmedFromDate = fromDate.trimmed();
+
+    if (trimmedLine1.isEmpty()) {
+        setStatus(QStringLiteral("Address line 1 is missing."));
+        return;
+    }
+
+    if (trimmedPostTown.isEmpty()) {
+        setStatus(QStringLiteral("Town/city is missing."));
+        return;
+    }
+
+    if (trimmedPostCode.isEmpty()) {
+        setStatus(QStringLiteral("Postcode is missing."));
+        return;
+    }
+
+    if (trimmedCountryCode.length() != 2) {
+        setStatus(QStringLiteral("Country code must be two letters."));
+        return;
+    }
+
+    const QDate parsedFromDate = QDate::fromString(trimmedFromDate, Qt::ISODate);
+    if (!parsedFromDate.isValid()) {
+        setStatus(QStringLiteral("Invalid address start date. Use YYYY-MM-DD."));
+        return;
+    }
+
+    QJsonObject body;
+    body.insert(QStringLiteral("line1"), trimmedLine1);
+    body.insert(QStringLiteral("line2"), line2.trimmed());
+    body.insert(QStringLiteral("line3"), line3.trimmed());
+    body.insert(QStringLiteral("postTown"), trimmedPostTown);
+    body.insert(QStringLiteral("postCode"), trimmedPostCode);
+    body.insert(QStringLiteral("countryCode"), trimmedCountryCode);
+    body.insert(QStringLiteral("from"), trimmedFromDate);
+
+    setStatus(QStringLiteral("Updating address..."));
+
+    sendJsonWithToken(QStringLiteral("/api/v2/addresses"),
+                      QStringLiteral("POST"),
+                      body,
+                      m_token,
+                      [this](const QByteArray &) {
+        setStatus(QStringLiteral("Address updated."));
+        refreshAll(m_startupDaysBack);
+        touchLastUpdated();
+        emit accountHolderAddressUpdated();
+    }, true);
+}
+
+// Account holder
+QVariantMap StarlingClient::accountHolderBasic() const
+{
+    return m_accountHolderBasic;
+}
+
+void StarlingClient::refreshAccountHolderBasic()
+{
+    setStatus(QStringLiteral("Loading account holder details..."));
+
+    getJson(QStringLiteral("/api/v2/account-holder"),
+            [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QVariantMap data;
+        data.insert(QStringLiteral("accountHolderUid"),
+                    root.value(QStringLiteral("accountHolderUid")).toString());
+        data.insert(QStringLiteral("accountHolderType"),
+                    root.value(QStringLiteral("accountHolderType")).toString());
+        data.insert(QStringLiteral("accountHolderState"),
+                    root.value(QStringLiteral("accountHolderState")).toString());
+
+        m_accountHolderBasic = data;
+        emit accountHolderBasicChanged();
+
+        touchLastUpdated();
+        setStatus(QStringLiteral("Account holder details loaded."));
+    });
+}
+
+void StarlingClient::updateAccountHolderEmail(const QString &email)
+{
+    const QString trimmedEmail = email.trimmed();
+
+    if (trimmedEmail.isEmpty()) {
+        setStatus(QStringLiteral("Email address is missing."));
+        return;
+    }
+
+    if (!trimmedEmail.contains(QLatin1Char('@')) || !trimmedEmail.contains(QLatin1Char('.'))) {
+        setStatus(QStringLiteral("Invalid email address."));
+        return;
+    }
+
+    QJsonObject body;
+    body.insert(QStringLiteral("email"), trimmedEmail);
+
+    setStatus(QStringLiteral("Updating email address..."));
+
+    sendJsonWithToken(QStringLiteral("/api/v2/account-holder/individual/email"),
+                      QStringLiteral("PUT"),
+                      body,
+                      m_token,
+                      [this, trimmedEmail](const QByteArray &) {
+        m_email = trimmedEmail;
+        emit accountChanged();
+
+        setStatus(QStringLiteral("Email address updated."));
+        touchLastUpdated();
+        emit accountHolderEmailUpdated(trimmedEmail);
+    }, true);
+}
+
+// Transactions
+QString StarlingClient::lastAttachmentPath() const
+{
+    return m_lastAttachmentPath;
+}
+
+void StarlingClient::clearLastAttachmentPath()
+{
+    if (m_lastAttachmentPath.isEmpty())
+        return;
+
+    m_lastAttachmentPath.clear();
+    emit lastAttachmentPathChanged();
+}
+
+void StarlingClient::uploadTransactionAttachment(const QString &feedItemUid,
+                                                 const QString &filePath)
+{
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedFeedItemUid = feedItemUid.trimmed();
+    const QString trimmedFilePath = filePath.trimmed();
+
+    if (trimmedFeedItemUid.isEmpty()) {
+        setStatus(QStringLiteral("Transaction UID is missing."));
+        return;
+    }
+
+    QFileInfo info(trimmedFilePath);
+    if (!info.exists() || !info.isFile()) {
+        setStatus(QStringLiteral("Attachment file not found."));
+        return;
+    }
+
+    QFile *file = new QFile(info.absoluteFilePath(), this);
+    if (!file->open(QIODevice::ReadOnly)) {
+        file->deleteLater();
+        setStatus(QStringLiteral("Could not open attachment file."));
+        return;
+    }
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/category/%2/%3/attachments")
+            .arg(m_accountUid)
+            .arg(m_categoryUid)
+            .arg(trimmedFeedItemUid);
+
+    QUrl url(QString::fromLatin1(BASE_URL) + path);
+
+    QNetworkRequest req(url);
+    req.setRawHeader("Authorization", QByteArray("Bearer ") + m_token.toUtf8());
+
+    QMimeDatabase mimeDb;
+    const QMimeType mime = mimeDb.mimeTypeForFile(info);
+    const QString mimeName = mime.isValid()
+            ? mime.name()
+            : QStringLiteral("application/octet-stream");
+
+    if (!(mimeName.startsWith(QStringLiteral("image/"))
+            || mimeName == QStringLiteral("application/pdf"))) {
+        file->deleteLater();
+        setStatus(QStringLiteral("Only images and PDF files can be uploaded."));
+        return;
+    }
+
+    const QByteArray body = file->readAll();
+    file->deleteLater();
+
+    req.setHeader(QNetworkRequest::ContentTypeHeader, QVariant(mimeName));
+
+
+    setStatus(QStringLiteral("Uploading attachment..."));
+    beginRequest();
+
+    QNetworkReply *rep = m_nam.post(req, body);
+
+    connect(rep, &QNetworkReply::finished, this, [this, rep, trimmedFeedItemUid]() {
+        const QByteArray body = rep->readAll();
+
+        if (rep->error() != QNetworkReply::NoError) {
+            qWarning() << "uploadTransactionAttachment failed url=" << rep->url()
+                       << "status=" << rep->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt()
+                       << "qtError=" << rep->errorString()
+                       << "body=" << QString::fromUtf8(body);
+
+            setStatus(QStringLiteral("Attachment upload failed: %1").arg(rep->errorString()));
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        setStatus(QStringLiteral("Attachment uploaded."));
+        refreshTransactionAttachments(trimmedFeedItemUid);
+        emit transactionAttachmentUploaded(trimmedFeedItemUid);
+        touchLastUpdated();
+
+        rep->deleteLater();
+        endRequest();
+    });
+}
+
+void StarlingClient::downloadTransactionAttachment(const QString &feedItemUid,
+                                                   const QString &attachmentUid,
+                                                   const QString &name)
+{
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedFeedItemUid = feedItemUid.trimmed();
+    const QString trimmedAttachmentUid = attachmentUid.trimmed();
+
+    if (trimmedFeedItemUid.isEmpty() || trimmedAttachmentUid.isEmpty()) {
+        setStatus(QStringLiteral("Attachment details are missing."));
+        return;
+    }
+
+    QString safeName = name.trimmed();
+    if (safeName.isEmpty())
+        safeName = QStringLiteral("attachment");
+
+    safeName.replace(QStringLiteral("/"), QStringLiteral("_"));
+    safeName.replace(QStringLiteral("\\"), QStringLiteral("_"));
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/category/%2/%3/attachments/%4")
+            .arg(m_accountUid)
+            .arg(m_categoryUid)
+            .arg(trimmedFeedItemUid)
+            .arg(trimmedAttachmentUid);
+
+    QUrl url(QString::fromLatin1(BASE_URL) + path);
+
+    QNetworkRequest req(url);
+    req.setRawHeader("Authorization", QByteArray("Bearer ") + m_token.toUtf8());
+
+    setStatus(QStringLiteral("Downloading attachment..."));
+    beginRequest();
+
+    QNetworkReply *rep = m_nam.get(req);
+
+    connect(rep, &QNetworkReply::finished, this, [this, rep, safeName, trimmedFeedItemUid, trimmedAttachmentUid]() {
+        const QByteArray body = rep->readAll();
+
+        if (rep->error() != QNetworkReply::NoError) {
+            qWarning() << "downloadTransactionAttachment failed url=" << rep->url()
+                       << "status=" << rep->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt()
+                       << "qtError=" << rep->errorString()
+                       << "body=" << QString::fromUtf8(body);
+
+            setStatus(QStringLiteral("Attachment download failed: %1").arg(rep->errorString()));
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        const QString docsRoot = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+        QDir dir(docsRoot + QStringLiteral("/Starling Attachments"));
+
+        if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
+            setStatus(QStringLiteral("Could not create attachment folder."));
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        QString finalName = QStringLiteral("%1-%2-%3")
+                .arg(trimmedFeedItemUid.left(8))
+                .arg(trimmedAttachmentUid.left(8))
+                .arg(safeName);
+
+        if (!finalName.contains(QLatin1Char('.'))) {
+            const QString contentType = rep->header(QNetworkRequest::ContentTypeHeader).toString();
+
+            if (contentType.contains(QStringLiteral("png")))
+                finalName += QStringLiteral(".png");
+            else if (contentType.contains(QStringLiteral("jpeg")) || contentType.contains(QStringLiteral("jpg")))
+                finalName += QStringLiteral(".jpg");
+            else if (contentType.contains(QStringLiteral("pdf")))
+                finalName += QStringLiteral(".pdf");
+        }
+
+        const QString filePath = dir.filePath(finalName);
+
+        QFile file(filePath);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            setStatus(QStringLiteral("Could not save attachment."));
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        file.write(body);
+        file.close();
+
+        m_lastAttachmentPath = filePath;
+        emit lastAttachmentPathChanged();
+
+        touchLastUpdated();
+        setStatus(QStringLiteral("Attachment saved: %1").arg(filePath));
+
+        rep->deleteLater();
+        endRequest();
+    });
+}
+
+QVariantMap StarlingClient::transactionMastercardDetails() const
+{
+    return m_transactionMastercardDetails;
+}
+
+void StarlingClient::refreshTransactionMastercardDetails(const QString &feedItemUid)
+{
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedUid = feedItemUid.trimmed();
+
+    if (trimmedUid.isEmpty()) {
+        setStatus(QStringLiteral("Transaction UID is missing."));
+        return;
+    }
+
+    m_transactionMastercardDetails.clear();
+    emit transactionMastercardDetailsChanged();
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/category/%2/%3/mastercard")
+            .arg(m_accountUid)
+            .arg(m_categoryUid)
+            .arg(trimmedUid);
+
+    setStatus(QStringLiteral("Loading card transaction details..."));
+
+    getJson(path, [this, trimmedUid](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QVariantMap details;
+        details.insert(QStringLiteral("feedItemUid"), trimmedUid);
+        details.insert(QStringLiteral("merchantName"), root.value(QStringLiteral("merchantName")).toString());
+        details.insert(QStringLiteral("merchantCategoryCode"), root.value(QStringLiteral("merchantCategoryCode")).toString());
+        details.insert(QStringLiteral("merchantCategory"), root.value(QStringLiteral("merchantCategory")).toString());
+        details.insert(QStringLiteral("merchantCountry"), root.value(QStringLiteral("merchantCountry")).toString());
+        details.insert(QStringLiteral("merchantCity"), root.value(QStringLiteral("merchantCity")).toString());
+        details.insert(QStringLiteral("cardLastFour"), root.value(QStringLiteral("cardLastFour")).toString());
+        details.insert(QStringLiteral("cardPresent"), root.value(QStringLiteral("cardPresent")).toBool());
+        details.insert(QStringLiteral("wallet"), root.value(QStringLiteral("wallet")).toString());
+        details.insert(QStringLiteral("posEntryMode"), root.value(QStringLiteral("posEntryMode")).toString());
+
+        m_transactionMastercardDetails = details;
+        emit transactionMastercardDetailsChanged();
+
+        setStatus(QStringLiteral("Card transaction details loaded."));
+    });
+}
+
+QVariantList StarlingClient::transactionReceipts() const
+{
+    return m_transactionReceipts;
+}
+
+void StarlingClient::refreshTransactionReceipts(const QString &feedItemUid)
+{
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedUid = feedItemUid.trimmed();
+
+    if (trimmedUid.isEmpty()) {
+        setStatus(QStringLiteral("Transaction UID is missing."));
+        return;
+    }
+
+    m_transactionReceipts.clear();
+    emit transactionReceiptsChanged();
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/category/%2/%3/receipts")
+            .arg(m_accountUid)
+            .arg(m_categoryUid)
+            .arg(trimmedUid);
+
+    setStatus(QStringLiteral("Loading transaction receipts..."));
+
+    getJson(path, [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QJsonArray items = root.value(QStringLiteral("receipts")).toArray();
+        if (items.isEmpty())
+            items = root.value(QStringLiteral("feedItemReceipts")).toArray();
+
+        QVariantList rows;
+
+        for (int i = 0; i < items.size(); ++i) {
+            const QJsonObject item = items.at(i).toObject();
+
+            QVariantMap row;
+            row.insert(QStringLiteral("receiptUid"),
+                       item.value(QStringLiteral("receiptUid")).toString(
+                           item.value(QStringLiteral("uid")).toString()));
+            row.insert(QStringLiteral("name"),
+                       item.value(QStringLiteral("name")).toString(
+                           item.value(QStringLiteral("merchantName")).toString()));
+            row.insert(QStringLiteral("createdAt"),
+                       formatIsoDateTime(item.value(QStringLiteral("createdAt")).toString()));
+            row.insert(QStringLiteral("total"),
+                       item.value(QStringLiteral("total")).toString());
+
+            rows.append(row);
+        }
+
+        m_transactionReceipts = rows;
+        emit transactionReceiptsChanged();
+
+        setStatus(QStringLiteral("Loaded %1 receipt(s).").arg(rows.size()));
+    });
+}
+
+QVariantList StarlingClient::transactionAttachments() const
+{
+    return m_transactionAttachments;
+}
+
+void StarlingClient::refreshTransactionAttachments(const QString &feedItemUid)
+{
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedUid = feedItemUid.trimmed();
+
+    if (trimmedUid.isEmpty()) {
+        setStatus(QStringLiteral("Transaction UID is missing."));
+        return;
+    }
+
+    m_transactionAttachments.clear();
+    emit transactionAttachmentsChanged();
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/category/%2/%3/attachments")
+            .arg(m_accountUid)
+            .arg(m_categoryUid)
+            .arg(trimmedUid);
+
+    setStatus(QStringLiteral("Loading transaction attachments..."));
+
+    getJson(path, [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QJsonArray items = root.value(QStringLiteral("attachments")).toArray();
+        if (items.isEmpty())
+            items = root.value(QStringLiteral("feedItemAttachments")).toArray();
+
+        QVariantList rows;
+
+        for (int i = 0; i < items.size(); ++i) {
+            const QJsonObject item = items.at(i).toObject();
+
+            QVariantMap row;
+            row.insert(QStringLiteral("feedItemAttachmentUid"),
+                       item.value(QStringLiteral("feedItemAttachmentUid")).toString(
+                           item.value(QStringLiteral("uid")).toString()));
+            row.insert(QStringLiteral("name"),
+                       item.value(QStringLiteral("name")).toString(
+                           item.value(QStringLiteral("filename")).toString()));
+            row.insert(QStringLiteral("contentType"),
+                       item.value(QStringLiteral("contentType")).toString(
+                           item.value(QStringLiteral("mimeType")).toString()));
+            row.insert(QStringLiteral("createdAt"),
+                       formatIsoDateTime(item.value(QStringLiteral("createdAt")).toString()));
+
+            rows.append(row);
+        }
+
+        m_transactionAttachments = rows;
+        emit transactionAttachmentsChanged();
+
+        setStatus(QStringLiteral("Loaded %1 attachment(s).").arg(rows.size()));
+    });
+}
+
+QVariantMap StarlingClient::transactionDetail() const
+{
+    return m_transactionDetail;
+}
+
+void StarlingClient::refreshTransactionDetail(const QString &feedItemUid)
+{
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedUid = feedItemUid.trimmed();
+
+    if (trimmedUid.isEmpty()) {
+        setStatus(QStringLiteral("Transaction UID is missing."));
+        return;
+    }
+
+    m_transactionDetail.clear();
+    emit transactionDetailChanged();
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/category/%2/%3")
+            .arg(m_accountUid)
+            .arg(m_categoryUid)
+            .arg(trimmedUid);
+
+    setStatus(QStringLiteral("Loading transaction details..."));
+
+    getJson(path, [this, trimmedUid](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        QJsonObject item = doc.object();
+
+        if (item.contains(QStringLiteral("feedItem")))
+            item = item.value(QStringLiteral("feedItem")).toObject();
+
+        QVariantMap detail;
+        detail.insert(QStringLiteral("feedItemUid"), trimmedUid);
+        detail.insert(QStringLiteral("counterPartyName"), item.value(QStringLiteral("counterPartyName")).toString());
+        detail.insert(QStringLiteral("counterPartyType"), item.value(QStringLiteral("counterPartyType")).toString());
+        detail.insert(QStringLiteral("reference"), item.value(QStringLiteral("reference")).toString());
+        detail.insert(QStringLiteral("userNote"), item.value(QStringLiteral("userNote")).toString());
+        detail.insert(QStringLiteral("spendingCategory"), item.value(QStringLiteral("spendingCategory")).toString());
+        detail.insert(QStringLiteral("status"), item.value(QStringLiteral("status")).toString());
+        detail.insert(QStringLiteral("source"), item.value(QStringLiteral("source")).toString());
+        detail.insert(QStringLiteral("direction"), item.value(QStringLiteral("direction")).toString());
+        detail.insert(QStringLiteral("transactionTime"), formatIsoDateTime(item.value(QStringLiteral("transactionTime")).toString()));
+        detail.insert(QStringLiteral("settlementTime"), formatIsoDateTime(item.value(QStringLiteral("settlementTime")).toString()));
+        detail.insert(QStringLiteral("updatedAt"), formatIsoDateTime(item.value(QStringLiteral("updatedAt")).toString()));
+
+        const QJsonObject amount = item.value(QStringLiteral("amount")).toObject();
+        const QString currency = amount.value(QStringLiteral("currency")).toString(QStringLiteral("GBP"));
+        const qint64 minor = amount.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
+
+        detail.insert(QStringLiteral("amount"), signedAmountString(detail.value(QStringLiteral("direction")).toString(),
+                                                                   minor,
+                                                                   currency));
+        detail.insert(QStringLiteral("currency"), currency);
+
+        m_transactionDetail = detail;
+        emit transactionDetailChanged();
+
+        touchLastUpdated();
+        setStatus(QStringLiteral("Transaction details loaded."));
+    });
+}
+
+// Spaces
+QVariantList StarlingClient::spaces() const
+{
+    return m_spaces;
+}
+
+qint64 StarlingClient::availableBalanceMinorUnits() const
+{
+    return m_availableBalanceMinorUnits;
+}
+
+void StarlingClient::refreshSpaces()
+{
+    if (m_accountUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    setStatus(QStringLiteral("Loading spaces..."));
+
+    const QString path =
+            QStringLiteral("/api/v2/account/%1/spaces")
+            .arg(m_accountUid);
+
+    getJson(path, [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QJsonArray items = root.value(QStringLiteral("spaces")).toArray();
+
+        if (items.isEmpty())
+            items = root.value(QStringLiteral("savingsGoals")).toArray();
+
+        QVariantList rows;
+
+        for (int i = 0; i < items.size(); ++i) {
+            const QJsonObject item = items.at(i).toObject();
+
+            QVariantMap row;
+
+            const QString spaceUid = item.value(QStringLiteral("spaceUid")).toString(
+                        item.value(QStringLiteral("savingsGoalUid")).toString());
+
+            const QString name = item.value(QStringLiteral("name")).toString(
+                        item.value(QStringLiteral("savingsGoalName")).toString());
+
+            const QString type = item.value(QStringLiteral("spaceType")).toString(
+                        item.value(QStringLiteral("type")).toString());
+
+            const QJsonObject balance =
+                    item.value(QStringLiteral("balance")).toObject();
+
+            const QJsonObject target =
+                    item.value(QStringLiteral("target")).toObject();
+
+            const QJsonObject savedAmount =
+                    item.value(QStringLiteral("savedAmount")).toObject();
+
+            const QJsonObject totalSaved =
+                    item.value(QStringLiteral("totalSaved")).toObject();
+
+            const QJsonObject balanceAmount =
+                    !balance.isEmpty() ? balance
+                                       : (!savedAmount.isEmpty() ? savedAmount : totalSaved);
+
+            const QString currency =
+                    balanceAmount.value(QStringLiteral("currency")).toString(QStringLiteral("GBP"));
+
+            const qint64 balanceMinor =
+                    balanceAmount.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
+
+            const QString targetCurrency =
+                    target.value(QStringLiteral("currency")).toString(currency);
+
+            const qint64 targetMinor =
+                    target.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
+
+            row.insert(QStringLiteral("spaceUid"), spaceUid);
+            row.insert(QStringLiteral("name"), name.isEmpty() ? QStringLiteral("Space") : name);
+            row.insert(QStringLiteral("type"), type);
+            row.insert(QStringLiteral("state"), item.value(QStringLiteral("state")).toString());
+            row.insert(QStringLiteral("balance"), formatMinorUnits(balanceMinor, currency));
+            row.insert(QStringLiteral("target"), targetMinor > 0 ? formatMinorUnits(targetMinor, targetCurrency) : QString());
+            row.insert(QStringLiteral("currency"), currency);
+            row.insert(QStringLiteral("createdAt"), formatIsoDateTime(item.value(QStringLiteral("createdAt")).toString()));
+            row.insert(QStringLiteral("updatedAt"), formatIsoDateTime(item.value(QStringLiteral("updatedAt")).toString()));
+            row.insert(QStringLiteral("balanceMinorUnits"), balanceMinor);
+
+            rows.append(row);
+        }
+
+        m_spaces = rows;
+        emit spacesChanged();
+
+        touchLastUpdated();
+        setStatus(QStringLiteral("Loaded %1 space(s).").arg(rows.size()));
+    });
+}
+
+// Saving goals
+void StarlingClient::createSavingsGoal(const QString &name, const QString &targetAmount)
+{
+    if (m_accountUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedName = name.trimmed();
+    if (trimmedName.isEmpty()) {
+        setStatus(QStringLiteral("Savings goal name is missing."));
+        return;
+    }
+
+    QString amountText = targetAmount.trimmed();
+    amountText.replace(QStringLiteral(","), QStringLiteral("."));
+
+    bool ok = false;
+    const double amountMajor = amountText.toDouble(&ok);
+
+    if (!ok || amountMajor <= 0.0) {
+        setStatus(QStringLiteral("Invalid target amount."));
+        return;
+    }
+
+    const qint64 minorUnits = qRound64(amountMajor * 100.0);
+
+    QJsonObject target;
+    target.insert(QStringLiteral("currency"), QStringLiteral("GBP"));
+    target.insert(QStringLiteral("minorUnits"), minorUnits);
+
+    QJsonObject body;
+    body.insert(QStringLiteral("name"), trimmedName);
+    body.insert(QStringLiteral("currency"), QStringLiteral("GBP"));
+    body.insert(QStringLiteral("target"), target);
+
+    const QString path =
+            QStringLiteral("/api/v2/account/%1/savings-goals")
+            .arg(m_accountUid);
+
+    setStatus(QStringLiteral("Creating savings goal..."));
+
+    sendJsonWithToken(path,
+                      QStringLiteral("PUT"),
+                      body,
+                      m_token,
+                      [this](const QByteArray &) {
+        setStatus(QStringLiteral("Savings goal created."));
+        refreshSpaces();
+        touchLastUpdated();
+        emit savingsGoalCreated();
+    }, false);
+}
+
+void StarlingClient::addMoneyToSavingsGoal(const QString &savingsGoalUid, const QString &amount)
+{
+    transferSavingsGoalMoney(savingsGoalUid, amount, true);
+}
+
+void StarlingClient::withdrawMoneyFromSavingsGoal(const QString &savingsGoalUid, const QString &amount)
+{
+    transferSavingsGoalMoney(savingsGoalUid, amount, false);
+}
+
+void StarlingClient::transferSavingsGoalMoney(const QString &savingsGoalUid,
+                                              const QString &amount,
+                                              bool addMoney)
+{
+    if (m_accountUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedGoalUid = savingsGoalUid.trimmed();
+    if (trimmedGoalUid.isEmpty()) {
+        setStatus(QStringLiteral("Savings goal UID is missing."));
+        return;
+    }
+
+    QString amountText = amount.trimmed();
+    amountText.replace(QStringLiteral(","), QStringLiteral("."));
+
+    bool ok = false;
+    const double amountMajor = amountText.toDouble(&ok);
+
+    if (!ok || amountMajor <= 0.0) {
+        setStatus(QStringLiteral("Invalid amount."));
+        return;
+    }
+
+    const qint64 minorUnits = qRound64(amountMajor * 100.0);
+
+    QJsonObject money;
+    money.insert(QStringLiteral("currency"), QStringLiteral("GBP"));
+    money.insert(QStringLiteral("minorUnits"), minorUnits);
+
+    QJsonObject body;
+    body.insert(QStringLiteral("amount"), money);
+
+    QString transferUid = QUuid::createUuid().toString();
+    transferUid.remove(QLatin1Char('{'));
+    transferUid.remove(QLatin1Char('}'));
+
+    const QString action = addMoney
+            ? QStringLiteral("add-money")
+            : QStringLiteral("withdraw-money");
+
+    const QString path =
+            QStringLiteral("/api/v2/account/%1/savings-goals/%2/%3/%4")
+            .arg(m_accountUid)
+            .arg(trimmedGoalUid)
+            .arg(action)
+            .arg(transferUid);
+
+    setStatus(addMoney
+              ? QStringLiteral("Adding money to savings goal...")
+              : QStringLiteral("Withdrawing money from savings goal..."));
+
+    sendJsonWithToken(path,
+                      QStringLiteral("PUT"),
+                      body,
+                      m_token,
+                      [this, addMoney](const QByteArray &) {
+        setStatus(addMoney
+                  ? QStringLiteral("Money added to savings goal.")
+                  : QStringLiteral("Money withdrawn from savings goal."));
+
+        refreshSpaces();
+        refreshBalance();
+        touchLastUpdated();
+        emit savingsGoalTransferCompleted();
+    }, false);
+}
+
+void StarlingClient::deleteSavingsGoal(const QString &savingsGoalUid)
+{
+    if (m_accountUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedGoalUid = savingsGoalUid.trimmed();
+    if (trimmedGoalUid.isEmpty()) {
+        setStatus(QStringLiteral("Savings goal UID is missing."));
+        return;
+    }
+
+    setStatus(QStringLiteral("Deleting savings goal..."));
+
+    const QString path =
+            QStringLiteral("/api/v2/account/%1/savings-goals/%2")
+            .arg(m_accountUid)
+            .arg(trimmedGoalUid);
+
+    sendDeleteWithToken(path, m_token, [this](const QByteArray &) {
+        setStatus(QStringLiteral("Savings goal deleted."));
+        refreshSpaces();
+        refreshBalance();
+        touchLastUpdated();
+        emit savingsGoalDeleted();
+    });
+}
+
+// RoundUp
+QVariantMap StarlingClient::roundUp() const
+{
+    return m_roundUp;
+}
+
+bool StarlingClient::roundUpLoaded() const
+{
+    return m_roundUpLoaded;
+}
+
+void StarlingClient::refreshRoundUp()
+{
+    if (m_accountUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/round-up")
+            .arg(m_accountUid);
+
+    setStatus(QStringLiteral("Loading round-up status..."));
+
+    getJson(path, [this](const QByteArray &body) {
+
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QVariantMap data;
+
+        const bool active = root.value(QStringLiteral("active")).toBool(false);
+        const QJsonObject details = root.value(QStringLiteral("roundUpGoalDetails")).toObject();
+
+        const QString goalUid = details.value(QStringLiteral("roundUpGoalUid")).toString();
+        const int multiplier = qRound(details.value(QStringLiteral("roundUpMultiplier")).toDouble(1.0));
+
+        data.insert(QStringLiteral("active"), active);
+        data.insert(QStringLiteral("roundUpGoalUid"), goalUid);
+        data.insert(QStringLiteral("roundUpMultiplier"), multiplier > 0 ? multiplier : 1);
+        data.insert(QStringLiteral("activatedAt"),
+                    formatIsoDateTime(details.value(QStringLiteral("activatedAt")).toString()));
+        data.insert(QStringLiteral("activatedBy"), details.value(QStringLiteral("activatedBy")).toString());
+        data.insert(QStringLiteral("primaryCategoryUid"), details.value(QStringLiteral("primaryCategoryUid")).toString());
+
+        QString goalName;
+        for (int i = 0; i < m_spaces.size(); ++i) {
+            const QVariantMap space = m_spaces.at(i).toMap();
+
+            if (space.value(QStringLiteral("spaceUid")).toString() == goalUid) {
+                goalName = space.value(QStringLiteral("name")).toString();
+                break;
+            }
+        }
+
+        data.insert(QStringLiteral("goalName"), goalName);
+
+        m_roundUp = data;
+        m_roundUpLoaded = true;
+        emit roundUpChanged();
+
+        setStatus(QStringLiteral("Round-up status loaded."));
+        touchLastUpdated();
+    });
+}
+
+void StarlingClient::disableRoundUp()
+{
+    if (m_accountUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/round-up")
+            .arg(m_accountUid);
+
+    setStatus(QStringLiteral("Disabling round-up..."));
+
+    sendDeleteWithToken(path, m_token, [this](const QByteArray &) {
+        setStatus(QStringLiteral("Round-up disabled."));
+        refreshRoundUp();
+        touchLastUpdated();
+        emit roundUpUpdated();
+    });
+}
+
+void StarlingClient::enableRoundUp(const QString &roundUpGoalUid, int multiplier)
+{
+    if (m_accountUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedGoalUid = roundUpGoalUid.trimmed();
+
+    if (trimmedGoalUid.isEmpty()) {
+        setStatus(QStringLiteral("Savings goal is missing."));
+        return;
+    }
+
+    if (multiplier < 1 || multiplier > 10) {
+        setStatus(QStringLiteral("Round-up multiplier must be between 1 and 10."));
+        return;
+    }
+
+    QJsonObject body;
+    body.insert(QStringLiteral("roundUpGoalUid"), trimmedGoalUid);
+    body.insert(QStringLiteral("roundUpMultiplier"), multiplier);
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/round-up")
+            .arg(m_accountUid);
+
+    setStatus(QStringLiteral("Enabling round-up..."));
+
+    sendJsonWithToken(path,
+                      QStringLiteral("PUT"),
+                      body,
+                      m_token,
+                      [this](const QByteArray &) {
+        setStatus(QStringLiteral("Round-up enabled."));
+        refreshRoundUp();
+        touchLastUpdated();
+        emit roundUpUpdated();
+    }, false);
+}
+
+// Feed Extract Csv - Statements/transactions
+QString StarlingClient::lastFeedExportCsvPath() const
+{
+    return m_lastFeedExportCsvPath;
+}
+
+void StarlingClient::downloadFeedExportCsvRange(const QString &startDate, const QString &endDate)
+{
+    if (m_accountUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedStartDate = startDate.trimmed();
+    const QString trimmedEndDate = endDate.trimmed();
+
+    const QDate start = QDate::fromString(trimmedStartDate, Qt::ISODate);
+    const QDate end = QDate::fromString(trimmedEndDate, Qt::ISODate);
+
+    if (!start.isValid() || !end.isValid()) {
+        setStatus(QStringLiteral("Invalid transaction export date range."));
+        return;
+    }
+
+    if (start > end) {
+        setStatus(QStringLiteral("Start date must be before end date."));
+        return;
+    }
+
+    QUrl url(QStringLiteral("%1/api/v2/accounts/%2/feed-export")
+             .arg(QString::fromLatin1(BASE_URL))
+             .arg(m_accountUid));
+
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("start"), trimmedStartDate);
+    query.addQueryItem(QStringLiteral("end"), trimmedEndDate);
+    url.setQuery(query);
+
+    QNetworkRequest req(url);
+    req.setRawHeader("Authorization", QByteArray("Bearer ") + m_token.toUtf8());
+    req.setRawHeader("Accept", "text/csv");
+
+    setStatus(QStringLiteral("Downloading feed export CSV..."));
+    beginRequest();
+
+    QNetworkReply *rep = m_nam.get(req);
+
+    connect(rep, &QNetworkReply::finished, this, [this, rep, trimmedStartDate, trimmedEndDate]() {
+        const QByteArray body = rep->readAll();
+
+        if (rep->error() != QNetworkReply::NoError) {
+            qWarning() << "downloadFeedExportCsvRange failed url=" << rep->url()
+                       << "status=" << rep->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt()
+                       << "qtError=" << rep->errorString()
+                       << "body=" << QString::fromUtf8(body);
+
+            setStatus(QStringLiteral("Transaction export CSV download failed: %1").arg(rep->errorString()));
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        const QString docsRoot = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+        QDir dir(docsRoot + QStringLiteral("/Starling Transaction Exports"));
+
+        if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
+            setStatus(QStringLiteral("Could not create trasnaction export folder."));
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        const QString fileName =
+                QStringLiteral("starling-transaction-export-%1-to-%2.csv")
+                .arg(trimmedStartDate)
+                .arg(trimmedEndDate);
+
+        const QString filePath = dir.filePath(fileName);
+
+        QFile file(filePath);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            setStatus(QStringLiteral("Could not save transaction export CSV."));
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        file.write(body);
+        file.close();
+
+        m_lastFeedExportCsvPath = filePath;
+        emit lastFeedExportCsvPathChanged();
+
+        touchLastUpdated();
+        setStatus(QStringLiteral("Transaction export CSV saved: %1").arg(filePath));
+
+        rep->deleteLater();
+        endRequest();
+    });
+}
+
+// Direct Debits/Mandates & Standing Orders
+QVariantList StarlingClient::directDebitPayments() const
+{
+    return m_directDebitPayments;
+}
+
+void StarlingClient::refreshDirectDebitPayments(const QString &mandateUid)
+{
+    const QString trimmedUid = mandateUid.trimmed();
+
+    if (trimmedUid.isEmpty()) {
+        setStatus(QStringLiteral("Direct Debit mandate UID is missing."));
+        return;
+    }
+
+    m_directDebitPayments.clear();
+    emit directDebitPaymentsChanged();
+
+    setStatus(QStringLiteral("Loading Direct Debit payments..."));
+
+    const QString path =
+            QStringLiteral("/api/v2/direct-debit/mandates/%1/payments")
+            .arg(trimmedUid);
+
+    QUrl url(QString::fromLatin1(BASE_URL) + path);
+
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("since"),
+                       QDate::currentDate().addYears(-1).toString(Qt::ISODate));
+    url.setQuery(query);
+
+    QNetworkRequest req(url);
+    req.setRawHeader("Authorization", QByteArray("Bearer ") + m_token.toUtf8());
+
+    beginRequest();
+
+    QNetworkReply *rep = m_nam.get(req);
+
+    connect(rep, &QNetworkReply::finished, this, [this, rep]() {
+        const QByteArray body = rep->readAll();
+        const int httpStatus =
+                rep->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+
+        if (rep->error() != QNetworkReply::NoError) {
+            m_directDebitPayments.clear();
+            emit directDebitPaymentsChanged();
+
+            if (httpStatus == 400) {
+                setStatus(QStringLiteral("No Direct Debit payments found."));
+
+                rep->deleteLater();
+                endRequest();
+                return;
+            }
+
+            qWarning() << "refreshDirectDebitPayments failed url=" << rep->url()
+                       << "status=" << httpStatus
+                       << "qtError=" << rep->errorString()
+                       << "body=" << QString::fromUtf8(body);
+
+            setStatus(QStringLiteral("Direct Debit payment history unavailable."));
+
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QJsonArray items = root.value(QStringLiteral("payments")).toArray();
+        if (items.isEmpty())
+            items = root.value(QStringLiteral("directDebitPayments")).toArray();
+
+        QVariantList rows;
+
+        for (int i = 0; i < items.size(); ++i) {
+            const QJsonObject item = items.at(i).toObject();
+
+            const QJsonObject amount = item.value(QStringLiteral("amount")).toObject();
+            const QString currency =
+                    amount.value(QStringLiteral("currency")).toString(QStringLiteral("GBP"));
+            const qint64 minor =
+                    amount.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
+
+            QVariantMap row;
+            row.insert(QStringLiteral("date"),
+                       item.value(QStringLiteral("date")).toString(
+                           item.value(QStringLiteral("paymentDate")).toString(
+                               item.value(QStringLiteral("created")).toString())));
+            row.insert(QStringLiteral("amount"),
+                       minor > 0 ? formatMinorUnits(minor, currency) : QString());
+            row.insert(QStringLiteral("status"), item.value(QStringLiteral("status")).toString());
+            row.insert(QStringLiteral("reference"), item.value(QStringLiteral("reference")).toString());
+
+            rows.append(row);
+        }
+
+        m_directDebitPayments = rows;
+        emit directDebitPaymentsChanged();
+
+        setStatus(rows.isEmpty()
+                  ? QStringLiteral("No Direct Debit payments found.")
+                  : QStringLiteral("Loaded %1 Direct Debit payment(s).").arg(rows.size()));
+
+        rep->deleteLater();
+        endRequest();
+    });
+}
+
+QVariantList StarlingClient::standingOrderPaymentHistory() const
+{
+    return m_standingOrderPaymentHistory;
+}
+
+QVariantList StarlingClient::standingOrderUpcomingPayments() const
+{
+    return m_standingOrderUpcomingPayments;
+}
+
+bool StarlingClient::regularPaymentsLoaded() const
+{
+    return m_directDebitMandatesLoaded && m_standingOrdersLoaded;
+}
+
+QVariantList StarlingClient::directDebitMandates() const
+{
+    return m_directDebitMandates;
+}
+
+QVariantList StarlingClient::standingOrders() const
+{
+    return m_standingOrders;
+}
+
+void StarlingClient::refreshStandingOrderPaymentHistory(const QString &paymentOrderUid)
+{
+    const QString trimmedUid = paymentOrderUid.trimmed();
+
+    if (trimmedUid.isEmpty()) {
+        setStatus(QStringLiteral("Standing Order UID is missing."));
+        return;
+    }
+
+    m_standingOrderPaymentHistory.clear();
+    emit standingOrderPaymentHistoryChanged();
+
+    setStatus(QStringLiteral("Loading Standing Order payment history..."));
+
+    const QString path =
+            QStringLiteral("/api/v2/payments/local/payment-order/%1/payments")
+            .arg(trimmedUid);
+
+    getJson(path, [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QJsonArray items = root.value(QStringLiteral("payments")).toArray();
+        if (items.isEmpty())
+            items = root.value(QStringLiteral("paymentOrders")).toArray();
+
+        QVariantList rows;
+
+        for (int i = 0; i < items.size(); ++i) {
+            const QJsonObject item = items.at(i).toObject();
+
+            const QJsonObject amount = item.value(QStringLiteral("amount")).toObject();
+            const QString currency = amount.value(QStringLiteral("currency")).toString(QStringLiteral("GBP"));
+            const qint64 minor = amount.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
+
+            QVariantMap row;
+            row.insert(QStringLiteral("paymentUid"), item.value(QStringLiteral("paymentUid")).toString());
+            row.insert(QStringLiteral("date"),
+                       item.value(QStringLiteral("createdAt")).toString(
+                           item.value(QStringLiteral("paymentDate")).toString(
+                               item.value(QStringLiteral("date")).toString())));
+            row.insert(QStringLiteral("amount"), minor > 0 ? formatMinorUnits(minor, currency) : QString());
+            row.insert(QStringLiteral("status"), item.value(QStringLiteral("status")).toString());
+            row.insert(QStringLiteral("reference"), item.value(QStringLiteral("reference")).toString());
+
+            rows.append(row);
+        }
+
+        m_standingOrderPaymentHistory = rows;
+        emit standingOrderPaymentHistoryChanged();
+
+        setStatus(QStringLiteral("Loaded %1 payment history item(s).").arg(rows.size()));
+    });
+}
+
+void StarlingClient::refreshRegularPayments()
+{
+    setStatus(QStringLiteral("Loading regular payments..."));
+
+    m_directDebitMandatesLoaded = false;
+    m_standingOrdersLoaded = false;
+    emit regularPaymentsLoadedChanged();
+
+    refreshDirectDebitMandates();
+    refreshStandingOrders();
+}
+
+void StarlingClient::refreshStandingOrderUpcomingPayments(const QString &paymentOrderUid)
+{
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedUid = paymentOrderUid.trimmed();
+    if (trimmedUid.isEmpty()) {
+        setStatus(QStringLiteral("Standing Order UID is missing."));
+        return;
+    }
+
+    m_standingOrderUpcomingPayments.clear();
+    emit standingOrderUpcomingPaymentsChanged();
+
+    setStatus(QStringLiteral("Loading upcoming payments..."));
+
+    const QString path =
+            QStringLiteral("/api/v2/payments/local/account/%1/category/%2/standing-orders/%3/upcoming-payments")
+            .arg(m_accountUid)
+            .arg(m_categoryUid)
+            .arg(trimmedUid);
+
+    getJson(path, [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QJsonArray items = root.value(QStringLiteral("upcomingPayments")).toArray();
+        if (items.isEmpty())
+            items = root.value(QStringLiteral("payments")).toArray();
+
+        QVariantList rows;
+
+        for (int i = 0; i < items.size(); ++i) {
+            const QJsonObject item = items.at(i).toObject();
+
+            QVariantMap row;
+            row.insert(QStringLiteral("date"),
+                       item.value(QStringLiteral("date")).toString(
+                           item.value(QStringLiteral("paymentDate")).toString(
+                               item.value(QStringLiteral("scheduledDate")).toString())));
+
+            const QJsonObject amount = item.value(QStringLiteral("amount")).toObject();
+            const QString currency = amount.value(QStringLiteral("currency")).toString(QStringLiteral("GBP"));
+            const qint64 minor = amount.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
+
+            row.insert(QStringLiteral("amount"), minor > 0 ? formatMinorUnits(minor, currency) : QString());
+            row.insert(QStringLiteral("status"), item.value(QStringLiteral("status")).toString());
+
+            rows.append(row);
+        }
+
+        m_standingOrderUpcomingPayments = rows;
+        emit standingOrderUpcomingPaymentsChanged();
+
+        setStatus(QStringLiteral("Loaded %1 upcoming payment(s).").arg(rows.size()));
+    });
+}
+
+void StarlingClient::refreshDirectDebitMandates()
+{
+    setStatus(QStringLiteral("Loading Direct Debits..."));
+
+    getJson(QStringLiteral("/api/v2/direct-debit/mandates"),
+            [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QJsonArray items = root.value(QStringLiteral("mandates")).toArray();
+        if (items.isEmpty())
+            items = root.value(QStringLiteral("directDebitMandates")).toArray();
+
+        QVariantList rows;
+
+        for (int i = 0; i < items.size(); ++i) {
+            const QJsonObject item = items.at(i).toObject();
+
+            QVariantMap row;
+
+            const QString uid = item.value(QStringLiteral("uid")).toString(
+                        item.value(QStringLiteral("mandateUid")).toString());
+
+            row.insert(QStringLiteral("mandateUid"), uid);
+            row.insert(QStringLiteral("reference"), item.value(QStringLiteral("reference")).toString());
+            row.insert(QStringLiteral("status"), item.value(QStringLiteral("status")).toString());
+            const QString ddStatus = row.value(QStringLiteral("status")).toString();
+            const bool ddActive = ddStatus == QStringLiteral("LIVE")
+                    || ddStatus == QStringLiteral("PENDING_CAS");
+
+            row.insert(QStringLiteral("displayStatus"),
+                       ddActive ? QStringLiteral("Active") : QStringLiteral("Cancelled"));
+            row.insert(QStringLiteral("isActive"), ddActive);
+            row.insert(QStringLiteral("source"), item.value(QStringLiteral("source")).toString());
+            row.insert(QStringLiteral("created"), formatIsoDateTime(item.value(QStringLiteral("created")).toString()));
+            row.insert(QStringLiteral("cancelled"), formatIsoDateTime(item.value(QStringLiteral("cancelled")).toString()));
+            row.insert(QStringLiteral("nextDate"), item.value(QStringLiteral("nextDate")).toString());
+            row.insert(QStringLiteral("lastDate"), item.value(QStringLiteral("lastDate")).toString());
+            row.insert(QStringLiteral("originatorName"), item.value(QStringLiteral("originatorName")).toString());
+            row.insert(QStringLiteral("originatorUid"), item.value(QStringLiteral("originatorUid")).toString());
+            row.insert(QStringLiteral("merchantUid"), item.value(QStringLiteral("merchantUid")).toString());
+            row.insert(QStringLiteral("accountUid"), item.value(QStringLiteral("accountUid")).toString());
+            row.insert(QStringLiteral("categoryUid"), item.value(QStringLiteral("categoryUid")).toString());
+
+            const QJsonObject lastPayment = item.value(QStringLiteral("lastPayment")).toObject();
+            row.insert(QStringLiteral("lastPaymentDate"), lastPayment.value(QStringLiteral("lastDate")).toString());
+
+            const QJsonObject lastAmount = lastPayment.value(QStringLiteral("lastAmount")).toObject();
+            const QString lastCurrency = lastAmount.value(QStringLiteral("currency")).toString(QStringLiteral("GBP"));
+            const qint64 lastMinor = lastAmount.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
+
+            row.insert(QStringLiteral("lastPaymentAmount"),
+                       lastPayment.isEmpty() ? QString() : formatMinorUnits(lastMinor, lastCurrency));
+
+            QString title = row.value(QStringLiteral("originatorName")).toString();
+            if (title.isEmpty())
+                title = row.value(QStringLiteral("reference")).toString();
+            if (title.isEmpty())
+                title = QStringLiteral("Direct Debit");
+
+            row.insert(QStringLiteral("title"), title);
+            rows.append(row);
+        }
+
+        m_directDebitMandates = rows;
+        emit directDebitMandatesChanged();
+        m_directDebitMandatesLoaded = true;
+        emit regularPaymentsLoadedChanged();
+
+        touchLastUpdated();
+        setStatus(QStringLiteral("Loaded %1 Direct Debit mandate(s).").arg(rows.size()));
+    });
+}
+
+void StarlingClient::refreshStandingOrders()
+{
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        if (!m_initializing)
+            initialize(m_startupDaysBack > 0 ? m_startupDaysBack : 14);
+        return;
+    }
+
+    setStatus(QStringLiteral("Loading Standing Orders..."));
+
+    const QString path =
+            QStringLiteral("/api/v2/payments/local/account/%1/category/%2/standing-orders")
+            .arg(m_accountUid)
+            .arg(m_categoryUid);
+
+    getJson(path, [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QJsonArray items = root.value(QStringLiteral("standingOrders")).toArray();
+        if (items.isEmpty())
+            items = root.value(QStringLiteral("paymentOrders")).toArray();
+
+        QVariantList rows;
+
+        for (int i = 0; i < items.size(); ++i) {
+            const QJsonObject item = items.at(i).toObject();
+
+            const QJsonObject amount = item.value(QStringLiteral("amount")).toObject();
+            const QString currency = amount.value(QStringLiteral("currency")).toString(QStringLiteral("GBP"));
+            const qint64 minor = amount.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
+
+            const QJsonObject recurrence = item.value(QStringLiteral("standingOrderRecurrence")).toObject();
+
+            QVariantMap row;
+            row.insert(QStringLiteral("paymentOrderUid"), item.value(QStringLiteral("paymentOrderUid")).toString());
+            row.insert(QStringLiteral("reference"), item.value(QStringLiteral("reference")).toString());
+            row.insert(QStringLiteral("payeeUid"), item.value(QStringLiteral("payeeUid")).toString());
+            row.insert(QStringLiteral("payeeAccountUid"), item.value(QStringLiteral("payeeAccountUid")).toString());
+            row.insert(QStringLiteral("nextDate"), item.value(QStringLiteral("nextDate")).toString());
+            row.insert(QStringLiteral("cancelledAt"), formatIsoDateTime(item.value(QStringLiteral("cancelledAt")).toString()));
+            row.insert(QStringLiteral("updatedAt"), formatIsoDateTime(item.value(QStringLiteral("updatedAt")).toString()));
+            row.insert(QStringLiteral("spendingCategory"), item.value(QStringLiteral("spendingCategory")).toString());
+            row.insert(QStringLiteral("categoryUid"), item.value(QStringLiteral("categoryUid")).toString());
+            row.insert(QStringLiteral("amount"), formatMinorUnits(minor, currency));
+
+            row.insert(QStringLiteral("startDate"), recurrence.value(QStringLiteral("startDate")).toString());
+            row.insert(QStringLiteral("frequency"), recurrence.value(QStringLiteral("frequency")).toString());
+            row.insert(QStringLiteral("interval"), recurrence.value(QStringLiteral("interval")).toVariant().toString());
+            row.insert(QStringLiteral("count"), recurrence.value(QStringLiteral("count")).toVariant().toString());
+            row.insert(QStringLiteral("untilDate"), recurrence.value(QStringLiteral("untilDate")).toString());
+
+            const QString cancelledAt = row.value(QStringLiteral("cancelledAt")).toString();
+            const QString nextDate = row.value(QStringLiteral("nextDate")).toString();
+            const QString count = row.value(QStringLiteral("count")).toString();
+
+            const bool cancelled = !cancelledAt.isEmpty();
+            const bool completed = !cancelled && !count.isEmpty() && nextDate.isEmpty();
+
+            QString displayStatus;
+            if (cancelled)
+                displayStatus = QStringLiteral("Cancelled");
+            else if (completed)
+                displayStatus = QStringLiteral("Completed");
+            else
+                displayStatus = QStringLiteral("Active");
+
+            row.insert(QStringLiteral("status"), displayStatus.toUpper());
+            row.insert(QStringLiteral("displayStatus"), displayStatus);
+            row.insert(QStringLiteral("isActive"), displayStatus == QStringLiteral("Active"));
+            row.insert(QStringLiteral("isCompleted"), completed);
+
+            QString title = row.value(QStringLiteral("reference")).toString();
+            if (title.isEmpty())
+                title = QStringLiteral("Standing Order");
+
+            row.insert(QStringLiteral("title"), title);
+            rows.append(row);
+        }
+
+        m_standingOrders = rows;
+        emit standingOrdersChanged();
+        m_standingOrdersLoaded = true;
+        emit regularPaymentsLoadedChanged();
+
+        touchLastUpdated();
+        setStatus(QStringLiteral("Loaded %1 Standing Order(s).").arg(rows.size()));
+    });
+}
+
+void StarlingClient::cancelDirectDebitMandate(const QString &mandateUid)
+{
+    const QString trimmedUid = mandateUid.trimmed();
+
+    if (trimmedUid.isEmpty()) {
+        setStatus(QStringLiteral("Direct Debit mandate UID is missing."));
+        return;
+    }
+
+    setStatus(QStringLiteral("Cancelling Direct Debit..."));
+
+    const QString path =
+            QStringLiteral("/api/v2/direct-debit/mandates/%1")
+            .arg(trimmedUid);
+
+    sendDeleteWithToken(path, m_token, [this](const QByteArray &) {
+        setStatus(QStringLiteral("Direct Debit cancelled."));
+        refreshDirectDebitMandates();
+        touchLastUpdated();
+    });
+}
+
+void StarlingClient::cancelStandingOrder(const QString &paymentOrderUid)
+{
+    const QString trimmedUid = paymentOrderUid.trimmed();
+
+    if (trimmedUid.isEmpty()) {
+        setStatus(QStringLiteral("Standing Order UID is missing."));
+        return;
+    }
+
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    setStatus(QStringLiteral("Cancelling Standing Order..."));
+
+    const QString path =
+            QStringLiteral("/api/v2/payments/local/account/%1/category/%2/standing-orders/%3")
+            .arg(m_accountUid)
+            .arg(m_categoryUid)
+            .arg(trimmedUid);
+
+    sendJsonWithToken(path,
+                      QStringLiteral("DELETE"),
+                      QJsonObject(),
+                      m_token,
+                      [this](const QByteArray &) {
+        setStatus(QStringLiteral("Standing Order cancelled."));
+        refreshStandingOrders();
+        touchLastUpdated();
+    }, true);
 }
 
 // Payments
@@ -2797,6 +4953,17 @@ void StarlingClient::refreshCards()
                 m_countryCode = cc;
                 m_postalAddress = buildPostalAddress(line1, line2, line3, postTown, postCode, cc);
 
+                m_currentAddress.clear();
+                m_currentAddress.insert(QStringLiteral("line1"), line1);
+                m_currentAddress.insert(QStringLiteral("line2"), line2);
+                m_currentAddress.insert(QStringLiteral("line3"), line3);
+                m_currentAddress.insert(QStringLiteral("postTown"), postTown);
+                m_currentAddress.insert(QStringLiteral("postCode"), postCode);
+                m_currentAddress.insert(QStringLiteral("countryCode"), cc);
+                m_currentAddress.insert(QStringLiteral("from"), current.value(QStringLiteral("from")).toString());
+                m_currentAddress.insert(QStringLiteral("udprn"), current.value(QStringLiteral("udprn")).toString());
+                m_currentAddress.insert(QStringLiteral("umprn"), current.value(QStringLiteral("umprn")).toString());
+
                 emit accountChanged();
             });
 
@@ -3233,15 +5400,129 @@ void StarlingClient::refreshBalance()
         const QJsonObject effective = root.value("effectiveBalance").toObject();
 
         m_currency = effective.value("currency").toString("GBP");
-        m_clearedBalance = formatMinorUnits(
-                    cleared.value("minorUnits").toVariant().toLongLong(), m_currency);
-        m_availableBalance = formatMinorUnits(
-                    effective.value("minorUnits").toVariant().toLongLong(), m_currency);
+
+        const qint64 clearedMinor = cleared.value("minorUnits").toVariant().toLongLong();
+        const qint64 effectiveMinor = effective.value("minorUnits").toVariant().toLongLong();
+
+        m_availableBalanceMinorUnits = effectiveMinor;
+
+        m_clearedBalance = formatMinorUnits(clearedMinor, m_currency);
+        m_availableBalance = formatMinorUnits(effectiveMinor, m_currency);
 
         emit balanceChanged();
         touchLastUpdated();
         setStatus("Balance updated.");
         refreshTransactions(m_startupDaysBack);
+    });
+}
+
+void StarlingClient::updateTransactionNote(const QString &feedItemUid, const QString &note)
+{
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedUid = feedItemUid.trimmed();
+
+    if (trimmedUid.isEmpty()) {
+        setStatus(QStringLiteral("Transaction UID is missing."));
+        return;
+    }
+
+    QJsonObject body;
+    body.insert(QStringLiteral("userNote"), note.trimmed());
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/category/%2/%3/user-note")
+            .arg(m_accountUid)
+            .arg(m_categoryUid)
+            .arg(trimmedUid);
+
+    setStatus(QStringLiteral("Saving transaction note..."));
+
+    sendJsonWithToken(path,
+                      QStringLiteral("PUT"),
+                      body,
+                      m_token,
+                      [this, trimmedUid, note](const QByteArray &) {
+        for (int i = 0; i < m_transactionRows.size(); ++i) {
+            QVariantMap row = m_transactionRows.at(i).toMap();
+
+            if (row.value(QStringLiteral("rowType")).toString() != QStringLiteral("transaction"))
+                continue;
+
+            if (row.value(QStringLiteral("feedItemUid")).toString() != trimmedUid)
+                continue;
+
+            row.insert(QStringLiteral("userNote"), note.trimmed());
+            m_transactionRows[i] = row;
+            break;
+        }
+
+        emit transactionsChanged();
+        emit transactionNoteUpdated(trimmedUid, note.trimmed());
+
+        touchLastUpdated();
+        setStatus(QStringLiteral("Transaction note saved."));
+    });
+}
+
+void StarlingClient::updateTransactionCategory(const QString &feedItemUid, const QString &category)
+{
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        setStatus(QStringLiteral("Account details are missing."));
+        return;
+    }
+
+    const QString trimmedUid = feedItemUid.trimmed();
+    const QString trimmedCategory = category.trimmed();
+
+    if (trimmedUid.isEmpty()) {
+        setStatus(QStringLiteral("Transaction UID is missing."));
+        return;
+    }
+
+    if (trimmedCategory.isEmpty()) {
+        setStatus(QStringLiteral("Spending category is missing."));
+        return;
+    }
+
+    QJsonObject body;
+    body.insert(QStringLiteral("spendingCategory"), trimmedCategory);
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/category/%2/%3/spending-category")
+            .arg(m_accountUid)
+            .arg(m_categoryUid)
+            .arg(trimmedUid);
+
+    setStatus(QStringLiteral("Saving transaction category..."));
+
+    sendJsonWithToken(path,
+                      QStringLiteral("PUT"),
+                      body,
+                      m_token,
+                      [this, trimmedUid, trimmedCategory](const QByteArray &) {
+        for (int i = 0; i < m_transactionRows.size(); ++i) {
+            QVariantMap row = m_transactionRows.at(i).toMap();
+
+            if (row.value(QStringLiteral("rowType")).toString() != QStringLiteral("transaction"))
+                continue;
+
+            if (row.value(QStringLiteral("feedItemUid")).toString() != trimmedUid)
+                continue;
+
+            row.insert(QStringLiteral("category"), trimmedCategory);
+            m_transactionRows[i] = row;
+            break;
+        }
+
+        emit transactionsChanged();
+        emit transactionCategoryUpdated(trimmedUid, trimmedCategory);
+
+        touchLastUpdated();
+        setStatus(QStringLiteral("Transaction category saved."));
     });
 }
 
@@ -3318,6 +5599,8 @@ void StarlingClient::refreshTransactions(int daysBack)
             tx.insert("section", section);
             tx.insert("status", status);
             tx.insert("category", spendingCategory);
+            tx.insert("feedItemUid", item.value("feedItemUid").toString());
+            tx.insert("userNote", item.value("userNote").toString());
 
             newRows.append(tx);
         }
@@ -3329,6 +5612,113 @@ void StarlingClient::refreshTransactions(int daysBack)
 
         setStatus(QStringLiteral("Loading payees..."));
         refreshPayees();
+    });
+}
+
+void StarlingClient::refreshTransactionsRange(const QString &fromDate, const QString &toDate)
+{
+    if (m_accountUid.isEmpty() || m_categoryUid.isEmpty()) {
+        if (!m_initializing)
+            initialize(m_startupDaysBack > 0 ? m_startupDaysBack : 14);
+        return;
+    }
+
+    const QDate from = QDate::fromString(fromDate.trimmed(), Qt::ISODate);
+    const QDate to = QDate::fromString(toDate.trimmed(), Qt::ISODate);
+
+    if (!from.isValid() || !to.isValid()) {
+        setStatus(QStringLiteral("Invalid transaction date range."));
+        return;
+    }
+
+    if (from > to) {
+        setStatus(QStringLiteral("From date must be before To date."));
+        return;
+    }
+
+    const QDateTime minDateTime(from, QTime(0, 0, 0), Qt::UTC);
+    const QDateTime maxDateTime(to.addDays(1), QTime(0, 0, 0), Qt::UTC);
+
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("minTransactionTimestamp"),
+                       minDateTime.toString(Qt::ISODate));
+    query.addQueryItem(QStringLiteral("maxTransactionTimestamp"),
+                       maxDateTime.toString(Qt::ISODate));
+
+    const QString path =
+            QStringLiteral("/api/v2/feed/account/%1/category/%2/transactions-between?%3")
+            .arg(m_accountUid)
+            .arg(m_categoryUid)
+            .arg(query.toString(QUrl::FullyEncoded));
+
+    setStatus(QStringLiteral("Loading transactions..."));
+
+    getJson(path, [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+        const QJsonArray items = root.value(QStringLiteral("feedItems")).toArray();
+
+        QVariantList newRows;
+        QString currentSection;
+
+        for (int i = 0; i < items.size(); ++i) {
+            const QJsonObject item = items.at(i).toObject();
+
+            const QString direction = item.value(QStringLiteral("direction")).toString();
+            const QString counterParty = item.value(QStringLiteral("counterPartyName")).toString();
+            const QString reference = item.value(QStringLiteral("reference")).toString();
+            const QString spendingCategory = item.value(QStringLiteral("spendingCategory")).toString();
+            const QString updatedAt = item.value(QStringLiteral("updatedAt")).toString();
+            const QString transactionTime = item.value(QStringLiteral("transactionTime")).toString();
+            const QString status = item.value(QStringLiteral("status")).toString();
+
+            const QString dateForDisplay =
+                    !transactionTime.isEmpty() ? transactionTime : updatedAt;
+
+            const QJsonObject amount = item.value(QStringLiteral("amount")).toObject();
+            const QString curr = amount.value(QStringLiteral("currency")).toString(QStringLiteral("GBP"));
+            const qint64 minor = amount.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
+
+            QString title = counterParty;
+            if (title.isEmpty())
+                title = reference;
+            if (title.isEmpty())
+                title = QStringLiteral("(no description)");
+
+            const QString section = sectionTitleForIsoDate(dateForDisplay);
+
+            if (section != currentSection) {
+                QVariantMap headerRow;
+                headerRow.insert(QStringLiteral("rowType"), QStringLiteral("header"));
+                headerRow.insert(QStringLiteral("title"), section);
+                newRows.append(headerRow);
+                currentSection = section;
+            }
+
+            QVariantMap tx;
+            tx.insert(QStringLiteral("rowType"), QStringLiteral("transaction"));
+            tx.insert(QStringLiteral("title"), title);
+            tx.insert(QStringLiteral("reference"), reference);
+            tx.insert(QStringLiteral("direction"), direction);
+            tx.insert(QStringLiteral("amount"), signedAmountString(direction, minor, curr));
+            tx.insert(QStringLiteral("amountValue"), static_cast<qint64>(minor));
+            tx.insert(QStringLiteral("currency"), curr);
+            tx.insert(QStringLiteral("date"), formatIsoDateTime(dateForDisplay));
+            tx.insert(QStringLiteral("dateRaw"), dateForDisplay);
+            tx.insert(QStringLiteral("section"), section);
+            tx.insert(QStringLiteral("status"), status);
+            tx.insert(QStringLiteral("category"), spendingCategory);
+            tx.insert(QStringLiteral("feedItemUid"), item.value(QStringLiteral("feedItemUid")).toString());
+            tx.insert(QStringLiteral("userNote"), item.value(QStringLiteral("userNote")).toString());
+
+            newRows.append(tx);
+        }
+
+        m_transactionRows = newRows;
+        emit transactionsChanged();
+
+        touchLastUpdated();
+        setStatus(QStringLiteral("Loaded %1 transaction(s).").arg(items.size()));
     });
 }
 

@@ -41,6 +41,7 @@ Page {
                                    && starlingClient.privateApiKeyPem.length > 0
     property bool isOnline: starlingClient.online
     property bool payeeLoading: payeeUid.length > 0 && (!payee || valueOrEmpty(payee.payeeUid).length === 0)
+    property bool payeeImagePreviewOpen: false
 
     function valueOrEmpty(v) {
         return (v === undefined || v === null) ? "" : String(v)
@@ -91,6 +92,9 @@ Page {
     Component.onCompleted: {
         if (payeeUid.length > 0)
             starlingClient.refreshPayeeDetail(payeeUid)
+
+        if (payeeUid && payeeUid.length > 0)
+           starlingClient.refreshPayeeImage(payeeUid)
 
         page.editPayeeName = valueOrEmpty(payee.payeeName)
         page.editFirstName = valueOrEmpty(payee.firstName)
@@ -230,8 +234,8 @@ Page {
                         Label {
                             width: parent.width
                             text: qsTr("Payee")
-                            color: Theme.secondaryHighlightColor
-                            font.pixelSize: Theme.fontSizeExtraSmall
+                            color: Theme.highlightColor
+                            font.pixelSize: Theme.fontSizeSmall
                         }
 
                         TextField {
@@ -257,6 +261,68 @@ Page {
                             text: valueOrEmpty(payee.payeeType)
                             wrapMode: Text.Wrap
                             color: Theme.secondaryColor
+                            font.pixelSize: Theme.fontSizeSmall
+                        }
+                    }
+                }
+
+                Rectangle {
+                    x: Theme.horizontalPageMargin
+                    width: parent.width - 2 * x
+                    height: payeeImageColumn.height + 2 * Theme.paddingMedium
+
+                    radius: Theme.paddingMedium
+                    color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
+                    border.width: 1
+                    border.color: Theme.rgba(Theme.primaryColor, 0.15)
+
+                    Column {
+                        id: payeeImageColumn
+                        x: Theme.paddingMedium
+                        y: Theme.paddingMedium
+                        width: parent.width - 2 * Theme.paddingMedium
+                        spacing: Theme.paddingMedium
+
+                        Label {
+                            width: parent.width
+                            text: qsTr("Payee image")
+                            color: Theme.highlightColor
+                            font.pixelSize: Theme.fontSizeSmall
+                            wrapMode: Text.Wrap
+                            truncationMode: TruncationMode.Fade
+                        }
+
+                        Item {
+                            width: parent.width
+                            height: payeeImage.visible ? payeeImage.height : 0
+                            visible: starlingClient.payeeImageAvailable
+
+                            Image {
+                                id: payeeImage
+                                width: Theme.itemSizeHuge * 1.4
+                                height: width
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                visible: starlingClient.payeeImageAvailable
+                                source: starlingClient.payeeImageAvailable
+                                        ? "file://" + starlingClient.payeeImagePath
+                                        : ""
+                                fillMode: Image.PreserveAspectCrop
+                                cache: false
+                            }
+
+                            MouseArea {
+                                anchors.fill: payeeImage
+                                enabled: starlingClient.payeeImageAvailable
+                                onClicked: page.payeeImagePreviewOpen = true
+                            }
+                        }
+
+                        Label {
+                            width: parent.width
+                            visible: !starlingClient.payeeImageAvailable
+                            text: qsTr("No payee image found.")
+                            color: Theme.secondaryColor
+                            wrapMode: Text.Wrap
                             font.pixelSize: Theme.fontSizeSmall
                         }
                     }
@@ -533,7 +599,7 @@ Page {
                                           ? valueOrEmpty(modelData.description)
                                           : qsTr("Account %1").arg(index + 1)
                                     color: Theme.highlightColor
-                                    font.pixelSize: Theme.fontSizeMedium
+                                    font.pixelSize: Theme.fontSizeSmall
                                     truncationMode: TruncationMode.Fade
                                 }
 
@@ -711,6 +777,35 @@ Page {
         busy: starlingClient.busy
         z: 998
         onUnlockRequested: starlingClient.unlock()
+    }
+
+    Item {
+        anchors.fill: parent
+        visible: page.payeeImagePreviewOpen
+        z: 999
+
+        Rectangle {
+            anchors.fill: parent
+            color: Theme.rgba(Theme.overlayBackgroundColor, 0.90)
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: page.payeeImagePreviewOpen = false
+        }
+
+        Image {
+            anchors.centerIn: parent
+            width: Math.min(parent.width - 2 * Theme.horizontalPageMargin,
+                            sourceSize.width > 0 ? sourceSize.width : parent.width - 2 * Theme.horizontalPageMargin)
+            height: Math.min(parent.height - 2 * Theme.paddingLarge,
+                             sourceSize.height > 0 ? sourceSize.height : parent.height - 2 * Theme.paddingLarge)
+            source: starlingClient.payeeImageAvailable
+                    ? "file://" + starlingClient.payeeImagePath
+                    : ""
+            fillMode: Image.PreserveAspectFit
+            cache: false
+        }
     }
 
     ActivityCatcher {

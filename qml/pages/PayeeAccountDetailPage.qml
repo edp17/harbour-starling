@@ -37,6 +37,9 @@ Page {
     property bool isOnline: starlingClient.online
     property bool readyForContent: !starlingClient.locked && hasMainToken
     property bool accountLoading: payeeUid.length > 0 && valueOrEmpty(accountData.payeeAccountUid).length === 0
+    property bool showPaymentHistory: false
+    property bool showScheduledPayments: false
+    property bool showLastReferences: false
 
     function valueOrEmpty(v) {
         return (v === undefined || v === null) ? "" : String(v)
@@ -188,8 +191,8 @@ Page {
                         Label {
                             width: parent.width
                             text: qsTr("Payee")
-                            color: Theme.secondaryHighlightColor
-                            font.pixelSize: Theme.fontSizeExtraSmall
+                            color: Theme.highlightColor
+                            font.pixelSize: Theme.fontSizeSmall
                         }
 
                         Label {
@@ -295,7 +298,7 @@ Page {
 
                                 Label {
                                     width: parent.width
-                                    text: qsTr("Sort code / bank identifier")
+                                    text: qsTr("Sort code / bank id.")
                                     color: Theme.secondaryHighlightColor
                                     font.pixelSize: Theme.fontSizeExtraSmall
                                 }
@@ -360,21 +363,56 @@ Page {
                             spacing: Theme.paddingSmall / 2
                             visible: accountData.lastReferences && accountData.lastReferences.length > 0
 
+                            Item {
+                                width: parent.width
+                                height: Math.max(lastReferencesTitle.height, showReferencesSwitch.height)
+
+                                Label {
+                                    id: lastReferencesTitle
+                                    anchors.left: parent.left
+                                    anchors.right: showReferencesSwitch.left
+                                    anchors.rightMargin: Theme.paddingMedium
+                                    anchors.verticalCenter: parent.verticalCenter
+
+                                    text: qsTr("Last references")
+                                    color: Theme.secondaryHighlightColor
+                                    font.pixelSize: Theme.fontSizeExtraSmall
+                                    truncationMode: TruncationMode.Fade
+                                }
+
+                                TextSwitch {
+                                    id: showReferencesSwitch
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+
+                                    width: Theme.itemSizeHuge * 1.2
+                                    text: qsTr("Show")
+                                    checked: page.showLastReferences
+
+                                    onCheckedChanged: {
+                                        page.showLastReferences = checked
+                                    }
+                                }
+                            }
+
                             Label {
                                 width: parent.width
-                                text: qsTr("Last references")
-                                color: Theme.secondaryHighlightColor
-                                font.pixelSize: Theme.fontSizeExtraSmall
+                                visible: !page.showLastReferences
+                                text: qsTr("%1 reference(s) available").arg(accountData.lastReferences.length)
+                                color: Theme.secondaryColor
+                                font.pixelSize: Theme.fontSizeSmall
+                                wrapMode: Text.Wrap
                             }
 
                             Repeater {
-                                model: accountData.lastReferences || []
+                                model: page.showLastReferences ? (accountData.lastReferences || []) : []
 
                                 delegate: Label {
                                     width: accountDetailsColumn.width
                                     text: valueOrEmpty(modelData)
                                     wrapMode: Text.Wrap
                                     color: Theme.primaryColor
+                                    font.pixelSize: Theme.fontSizeSmall
                                 }
                             }
                         }
@@ -385,6 +423,369 @@ Page {
                             color: Theme.secondaryColor
                             font.pixelSize: Theme.fontSizeSmall
                             visible: !accountData.lastReferences || accountData.lastReferences.length === 0
+                        }
+                    }
+                }
+
+                Rectangle {
+                    x: Theme.horizontalPageMargin
+                    width: parent.width - 2 * x
+                    height: scheduledColumn.height + 2 * Theme.paddingMedium
+
+                    radius: Theme.paddingMedium
+                    color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
+                    border.width: 1
+                    border.color: Theme.rgba(Theme.primaryColor, 0.15)
+
+                    Column {
+                        id: scheduledColumn
+                        x: Theme.paddingMedium
+                        y: Theme.paddingMedium
+                        width: parent.width - 2 * Theme.paddingMedium
+                        spacing: Theme.paddingSmall
+
+                        Item {
+                            width: parent.width
+                            height: Math.max(scheduledTitleLabel.height, showScheduledSwitch.height)
+
+                            Label {
+                                id: scheduledTitleLabel
+                                anchors.left: parent.left
+                                anchors.right: showScheduledSwitch.left
+                                anchors.rightMargin: Theme.paddingMedium
+                                anchors.verticalCenter: parent.verticalCenter
+
+                                text: qsTr("Scheduled payments")
+                                color: Theme.highlightColor
+                                font.pixelSize: Theme.fontSizeSmall
+                                truncationMode: TruncationMode.Fade
+                            }
+
+                            TextSwitch {
+                                id: showScheduledSwitch
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+
+                                width: Theme.itemSizeHuge * 1.1
+                                text: qsTr("Show")
+                                checked: page.showScheduledPayments
+                                enabled: hasValue(page.accountData.payeeAccountUid) && !starlingClient.busy
+
+                                onCheckedChanged: {
+                                    page.showScheduledPayments = checked
+
+                                    if (checked) {
+                                        starlingClient.refreshPayeeAccountScheduledPayments(
+                                                    page.payeeUid,
+                                                    valueOrEmpty(page.accountData.payeeAccountUid))
+                                    }
+                                }
+                            }
+                        }
+
+                        Label {
+                            width: parent.width
+                            text: qsTr("Show future payments scheduled for this payee account.")
+                            color: Theme.secondaryColor
+                            wrapMode: Text.Wrap
+                            font.pixelSize: Theme.fontSizeSmall
+                        }
+
+                        Label {
+                            width: parent.width
+                            visible: page.showScheduledPayments
+                                     && starlingClient.payeeAccountScheduledPayments.length === 0
+                            text: starlingClient.busy
+                                  ? qsTr("Loading scheduled payments...")
+                                  : qsTr("No scheduled payments found.")
+                            color: Theme.secondaryColor
+                            wrapMode: Text.Wrap
+                            font.pixelSize: Theme.fontSizeSmall
+                        }
+                    }
+                }
+
+                Repeater {
+                    model: page.showScheduledPayments ? starlingClient.payeeAccountScheduledPayments : []
+
+                    Rectangle {
+                        x: Theme.horizontalPageMargin
+                        width: parent.width - 2 * x
+                        height: scheduledPaymentRow.height + 2 * Theme.paddingMedium
+
+                        radius: Theme.paddingMedium
+                        color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
+                        border.width: 1
+                        border.color: Theme.rgba(Theme.primaryColor, 0.15)
+
+                        Row {
+                            id: scheduledPaymentRow
+
+                            x: Theme.paddingMedium
+                            y: Theme.paddingMedium
+                            width: parent.width - 2 * Theme.paddingMedium
+                            spacing: Theme.paddingMedium
+
+                            Column {
+                                width: parent.width - scheduledAmountColumn.width - Theme.paddingMedium
+                                spacing: Theme.paddingSmall / 2
+
+                                Label {
+                                    width: parent.width
+                                    text: (modelData.reference || "").length > 0
+                                          ? modelData.reference
+                                          : qsTr("Scheduled payment")
+                                    color: Theme.primaryColor
+                                    font.pixelSize: Theme.fontSizeMedium
+                                    font.bold: true
+                                    truncationMode: TruncationMode.Fade
+                                }
+
+                                Label {
+                                    width: parent.width
+                                    text: modelData.date || "-"
+                                    color: Theme.secondaryColor
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    wrapMode: Text.Wrap
+                                }
+
+                                Label {
+                                    width: parent.width
+                                    visible: (modelData.paymentType || "").length > 0
+                                    text: qsTr("Type: %1").arg(modelData.paymentType.replace("_", " "))
+                                    color: Theme.secondaryColor
+                                    font.pixelSize: Theme.fontSizeExtraSmall
+                                    truncationMode: TruncationMode.Fade
+                                }
+
+                                Label {
+                                    width: parent.width
+                                    visible: (modelData.frequency || "").length > 0
+                                    text: qsTr("Frequency: %1").arg(
+                                              ((modelData.interval || "").length > 0 && modelData.interval !== "1")
+                                              ? qsTr("Every %1 %2").arg(modelData.interval).arg(modelData.frequency)
+                                              : modelData.frequency)
+                                    color: Theme.secondaryColor
+                                    font.pixelSize: Theme.fontSizeExtraSmall
+                                    truncationMode: TruncationMode.Fade
+                                }
+
+                                Label {
+                                    width: parent.width
+                                    visible: (modelData.spendingCategory || "").length > 0
+                                    text: qsTr("Category: %1").arg(modelData.spendingCategory)
+                                    color: Theme.secondaryColor
+                                    font.pixelSize: Theme.fontSizeExtraSmall
+                                    truncationMode: TruncationMode.Fade
+                                }
+                            }
+
+                            Column {
+                                id: scheduledAmountColumn
+
+                                width: Theme.itemSizeHuge * 1.1
+                                spacing: Theme.paddingSmall / 2
+
+                                Label {
+                                    width: parent.width
+                                    text: modelData.amount || "-"
+                                    color: Theme.highlightColor
+                                    font.pixelSize: Theme.fontSizeMedium
+                                    font.bold: true
+                                    horizontalAlignment: Text.AlignRight
+                                    truncationMode: TruncationMode.Fade
+                                }
+
+                                Label {
+                                    width: parent.width
+                                    visible: (modelData.status || "").length > 0
+                                    text: modelData.status
+                                    color: Theme.secondaryColor
+                                    font.pixelSize: Theme.fontSizeExtraSmall
+                                    horizontalAlignment: Text.AlignRight
+                                    truncationMode: TruncationMode.Fade
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    x: Theme.horizontalPageMargin
+                    width: parent.width - 2 * x
+                    height: historyColumn.height + 2 * Theme.paddingMedium
+
+                    radius: Theme.paddingMedium
+                    color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
+                    border.width: 1
+                    border.color: Theme.rgba(Theme.primaryColor, 0.15)
+
+                    Column {
+                        id: historyColumn
+                        x: Theme.paddingMedium
+                        y: Theme.paddingMedium
+                        width: parent.width - 2 * Theme.paddingMedium
+                        spacing: Theme.paddingSmall
+
+                        Item {
+                            width: parent.width
+                            height: Math.max(historyTitleLabel.height, showHistorySwitch.height)
+
+                            Label {
+                                id: historyTitleLabel
+                                anchors.left: parent.left
+                                anchors.right: showHistorySwitch.left
+                                anchors.rightMargin: Theme.paddingMedium
+                                anchors.verticalCenter: parent.verticalCenter
+
+                                text: qsTr("Payment history")
+                                color: Theme.highlightColor
+                                font.pixelSize: Theme.fontSizeSmall
+                                truncationMode: TruncationMode.Fade
+                            }
+
+                            TextSwitch {
+                                id: showHistorySwitch
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+
+                                width: Theme.itemSizeHuge * 1.3
+                                text: qsTr("Show")
+                                checked: page.showPaymentHistory
+                                enabled: hasValue(page.accountData.payeeAccountUid) && !starlingClient.busy
+
+                                onCheckedChanged: {
+                                    page.showPaymentHistory = checked
+
+                                    if (checked) {
+                                        starlingClient.refreshPayeeAccountPayments(
+                                                    page.payeeUid,
+                                                    valueOrEmpty(page.accountData.payeeAccountUid))
+                                    }
+                                }
+                            }
+                        }
+
+                        Label {
+                            width: parent.width
+                            text: qsTr("Show payments made to this payee account.")
+                            color: Theme.secondaryColor
+                            wrapMode: Text.Wrap
+                            font.pixelSize: Theme.fontSizeSmall
+                        }
+
+                        Label {
+                            width: parent.width
+                            visible: page.showPaymentHistory
+                                     && starlingClient.payeeAccountPayments.length === 0
+                            text: starlingClient.busy
+                                  ? qsTr("Loading payment history...")
+                                  : qsTr("No payment history found.")
+                            color: Theme.secondaryColor
+                            wrapMode: Text.Wrap
+                            font.pixelSize: Theme.fontSizeSmall
+                        }
+                    }
+                }
+
+                Repeater {
+                    model: page.showPaymentHistory ? starlingClient.payeeAccountPayments : []
+
+                    Rectangle {
+                        x: Theme.horizontalPageMargin
+                        width: parent.width - 2 * x
+                        height: paymentRow.height + 2 * Theme.paddingMedium
+
+                        radius: Theme.paddingMedium
+                        color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
+                        border.width: 1
+                        border.color: Theme.rgba(Theme.primaryColor, 0.15)
+
+                        Row {
+                            id: paymentRow
+
+                            x: Theme.paddingMedium
+                            y: Theme.paddingMedium
+                            width: parent.width - 3 * Theme.paddingMedium - Theme.iconSizeMedium
+                            spacing: Theme.paddingMedium
+
+                            Column {
+                                width: parent.width - amountColumn.width - Theme.paddingMedium
+                                spacing: Theme.paddingSmall / 2
+
+                                Label {
+                                    width: parent.width
+                                    text: (modelData.reference || "").length > 0
+                                          ? modelData.reference
+                                          : qsTr("Payment")
+                                    color: Theme.primaryColor
+                                    font.pixelSize: Theme.fontSizeMedium
+                                    font.bold: true
+                                    truncationMode: TruncationMode.Fade
+                                }
+
+                                Label {
+                                    width: parent.width
+                                    text: modelData.date || "-"
+                                    color: Theme.secondaryColor
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    wrapMode: Text.Wrap
+                                }
+
+                                Label {
+                                    width: parent.width
+                                    visible: (modelData.spendingCategory || "").length > 0
+                                    text: modelData.spendingCategory
+                                    color: Theme.secondaryColor
+                                    font.pixelSize: Theme.fontSizeExtraSmall
+                                    truncationMode: TruncationMode.Fade
+                                }
+                            }
+
+                            Column {
+                                id: amountColumn
+
+                                width: Theme.itemSizeHuge * 1.1
+                                spacing: Theme.paddingSmall / 2
+
+                                Label {
+                                    width: parent.width
+                                    text: modelData.amount || "-"
+                                    color: Theme.highlightColor
+                                    font.pixelSize: Theme.fontSizeMedium
+                                    font.bold: true
+                                    horizontalAlignment: Text.AlignRight
+                                    truncationMode: TruncationMode.Fade
+                                }
+
+                                Label {
+                                    width: parent.width
+                                    visible: (modelData.status || "").length > 0
+                                    text: modelData.status
+                                    color: Theme.secondaryColor
+                                    font.pixelSize: Theme.fontSizeExtraSmall
+                                    horizontalAlignment: Text.AlignRight
+                                    truncationMode: TruncationMode.Fade
+                                }
+                            }
+                        }
+
+                        Image {
+                            anchors.right: parent.right
+                            anchors.rightMargin: Theme.paddingMedium
+                            anchors.verticalCenter: parent.verticalCenter
+                            source: "image://theme/icon-m-right"
+                            opacity: 0.7
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+
+                            onClicked: {
+                                pageStack.push(Qt.resolvedUrl("PayeePaymentDetailPage.qml"), {
+                                    paymentData: modelData
+                                })
+                            }
                         }
                     }
                 }

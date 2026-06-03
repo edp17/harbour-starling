@@ -44,9 +44,9 @@ Page {
                 width: parent.width - 2 * x
                 height: importantColumn.height + 2 * Theme.paddingMedium
                 radius: Theme.paddingMedium
-                color: Theme.rgba(Theme.highlightBackgroundColor, 0.10)
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
                 border.width: 1
-                border.color: Theme.rgba(Theme.highlightColor, 0.18)
+                border.color: Theme.rgba(Theme.highlightColor, 0.15)
 
                 Column {
                     id: importantColumn
@@ -67,7 +67,7 @@ Page {
                         width: parent.width
                         text: qsTr("Anyone with access to your unlocked device or active app session may be able to access your account information.")
                         color: Theme.primaryColor
-                        font.pixelSize: Theme.fontSizeSmall
+                        font.pixelSize: Theme.fontSizeExtraSmall
                         wrapMode: Text.Wrap
                     }
 
@@ -75,7 +75,7 @@ Page {
                         width: parent.width
                         text: qsTr("If you believe a token has been exposed, revoke it in your Starling developer settings and replace it in this app.")
                         color: Theme.primaryColor
-                        font.pixelSize: Theme.fontSizeSmall
+                        font.pixelSize: Theme.fontSizeExtraSmall
                         wrapMode: Text.Wrap
                     }
                 }
@@ -86,9 +86,9 @@ Page {
                 width: parent.width - 2 * x
                 height: authColumn.height + 2 * Theme.paddingMedium
                 radius: Theme.paddingMedium
-                color: Theme.rgba(Theme.highlightBackgroundColor, 0.10)
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
                 border.width: 1
-                border.color: Theme.rgba(Theme.highlightColor, 0.18)
+                border.color: Theme.rgba(Theme.highlightColor, 0.15)
 
                 Column {
                     id: authColumn
@@ -109,7 +109,7 @@ Page {
                         width: parent.width
                         text: qsTr("The Personal Access Token is used for access your Starling account data from this app.")
                         color: Theme.primaryColor
-                        font.pixelSize: Theme.fontSizeSmall * 0.9
+                        font.pixelSize: Theme.fontSizeExtraSmall
                         wrapMode: Text.Wrap
                     }
 
@@ -117,7 +117,7 @@ Page {
                         width: parent.width
                         text: qsTr("It is stored securely on your device so you do not need to enter it every time you open the app.")
                         color: Theme.secondaryColor
-                        font.pixelSize: Theme.fontSizeSmall * 0.9
+                        font.pixelSize: Theme.fontSizeExtraSmall
                         wrapMode: Text.Wrap
                     }
                 }
@@ -128,9 +128,9 @@ Page {
                 width: parent.width - 2 * x
                 height: payeeTokenColumn.height + 2 * Theme.paddingMedium
                 radius: Theme.paddingMedium
-                color: Theme.rgba(Theme.highlightBackgroundColor, 0.10)
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
                 border.width: 1
-                border.color: Theme.rgba(Theme.highlightColor, 0.18)
+                border.color: Theme.rgba(Theme.highlightColor, 0.15)
 
                 Column {
                     id: payeeTokenColumn
@@ -151,7 +151,7 @@ Page {
                         width: parent.width
                         text: qsTr("The payee write token is used only for actions that create or modify payees.")
                         color: Theme.primaryColor
-                        font.pixelSize: Theme.fontSizeSmall * 0.9
+                        font.pixelSize: Theme.fontSizeExtraSmall
                         wrapMode: Text.Wrap
                     }
 
@@ -159,7 +159,7 @@ Page {
                         width: parent.width
                         text: qsTr("It is stored separately from the main Personal Access Token because it grants additional permissions.")
                         color: Theme.secondaryColor
-                        font.pixelSize: Theme.fontSizeSmall * 0.9
+                        font.pixelSize: Theme.fontSizeExtraSmall
                         wrapMode: Text.Wrap
                     }
                 }
@@ -170,9 +170,9 @@ Page {
                 width: parent.width - 2 * x
                 height: signingColumn.height + 2 * Theme.paddingMedium
                 radius: Theme.paddingMedium
-                color: Theme.rgba(Theme.highlightBackgroundColor, 0.10)
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
                 border.width: 1
-                border.color: Theme.rgba(Theme.highlightColor, 0.18)
+                border.color: Theme.rgba(Theme.highlightColor, 0.15)
 
                 Column {
                     id: signingColumn
@@ -193,7 +193,7 @@ Page {
                         width: parent.width
                         text: qsTr("Payments require both an API Key UID and a PEM private key. These are used to sign payment requests before submission.")
                         color: Theme.primaryColor
-                        font.pixelSize: Theme.fontSizeSmall * 0.9
+                        font.pixelSize: Theme.fontSizeExtraSmall
                         wrapMode: Text.Wrap
                     }
 
@@ -201,7 +201,7 @@ Page {
                         width: parent.width
                         text: qsTr("Without valid signing credentials, payment creation remains unavailable.")
                         color: Theme.secondaryColor
-                        font.pixelSize: Theme.fontSizeSmall * 0.9
+                        font.pixelSize: Theme.fontSizeExtraSmall
                         wrapMode: Text.Wrap
                     }
                 }
@@ -212,9 +212,9 @@ Page {
                 width: parent.width - 2 * x
                 height: lockColumn.height + 2 * Theme.paddingMedium
                 radius: Theme.paddingMedium
-                color: Theme.rgba(Theme.highlightBackgroundColor, 0.10)
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
                 border.width: 1
-                border.color: Theme.rgba(Theme.highlightColor, 0.18)
+                border.color: Theme.rgba(Theme.highlightColor, 0.15)
 
                 Column {
                     id: lockColumn
@@ -235,7 +235,7 @@ Page {
                         width: parent.width
                         text: qsTr("When the app locks, sensitive account data is hidden until you unlock the app again.")
                         color: Theme.primaryColor
-                        font.pixelSize: Theme.fontSizeSmall * 0.9
+                        font.pixelSize: Theme.fontSizeExtraSmall
                         wrapMode: Text.Wrap
                     }
 
@@ -243,7 +243,7 @@ Page {
                         width: parent.width
                         text: qsTr("You can configure whether the app locks immediately when sent to the background, or only after the selected inactivity timeout.")
                         color: Theme.secondaryColor
-                        font.pixelSize: Theme.fontSizeSmall * 0.9
+                        font.pixelSize: Theme.fontSizeExtraSmall
                         wrapMode: Text.Wrap
                     }
                 }
@@ -254,9 +254,9 @@ Page {
                 width: parent.width - 2 * x
                 height: pinColumn.height + 2 * Theme.paddingMedium
                 radius: Theme.paddingMedium
-                color: Theme.rgba(Theme.highlightBackgroundColor, 0.10)
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
                 border.width: 1
-                border.color: Theme.rgba(Theme.highlightColor, 0.18)
+                border.color: Theme.rgba(Theme.highlightColor, 0.15)
 
                 Column {
                     id: pinColumn
@@ -277,7 +277,7 @@ Page {
                         width: parent.width
                         text: qsTr("If enabled, the app PIN is required before the app can be unlocked and sensitive actions can be confirmed.")
                         color: Theme.primaryColor
-                        font.pixelSize: Theme.fontSizeSmall * 0.9
+                        font.pixelSize: Theme.fontSizeExtraSmall
                         wrapMode: Text.Wrap
                     }
 
@@ -285,19 +285,10 @@ Page {
                         width: parent.width
                         text: qsTr("The PIN helps protect your session on the device, but it does not replace good device security.")
                         color: Theme.secondaryColor
-                        font.pixelSize: Theme.fontSizeSmall * 0.9
+                        font.pixelSize: Theme.fontSizeExtraSmall
                         wrapMode: Text.Wrap
                     }
                 }
-            }
-
-            Label {
-                x: Theme.horizontalPageMargin
-                width: parent.width - 2 * x
-                text: qsTr("You can manage tokens, API keys and App PIN from Settings.")
-                color: Theme.secondaryColor
-                font.pixelSize: Theme.fontSizeSmall * 0.9
-                wrapMode: Text.Wrap
             }
 
             Item {

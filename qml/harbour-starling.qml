@@ -24,6 +24,12 @@ import "components"
 ApplicationWindow {
     id: appWindow
 
+    property string transactionFilterLabel: qsTr("Last 14 days")
+    property int transactionFilterDays: 14
+    property bool transactionFilterCustom: false
+    property string transactionFilterFrom: ""
+    property string transactionFilterTo: ""
+
     PinSetupDialog {
         anchors.fill: parent
     }
