@@ -84,6 +84,8 @@ class StarlingClient : public QObject
     Q_PROPERTY(bool profileImageAvailable READ profileImageAvailable NOTIFY profileImageChanged)
     Q_PROPERTY(QVariantList payeeAccountPayments READ payeeAccountPayments NOTIFY payeeAccountPaymentsChanged)
     Q_PROPERTY(QVariantList payeeAccountScheduledPayments READ payeeAccountScheduledPayments NOTIFY payeeAccountScheduledPaymentsChanged)
+    Q_PROPERTY(QString payeeImagePath READ payeeImagePath NOTIFY payeeImageChanged)
+    Q_PROPERTY(bool payeeImageAvailable READ payeeImageAvailable NOTIFY payeeImageChanged)
 
 public:
     explicit StarlingClient(QObject *parent = nullptr);
@@ -118,6 +120,7 @@ public:
     QString pinSettingsError() const;
     QString lastAttachmentPath() const;
     QString profileImagePath() const;
+    QString payeeImagePath() const;
     QVariantMap paymentDraft() const;
     QVariantMap transactionDetail() const;
     QVariantMap payeeDetail() const;
@@ -156,6 +159,7 @@ public:
     bool pinConfirmationPending() const;
     bool roundUpLoaded() const;
     bool profileImageAvailable() const;
+    bool payeeImageAvailable() const;
     void setToken(const QString &token);
     void setPayeeWriteToken(const QString &token);
     void setApiKeyId(const QString &value);
@@ -238,6 +242,7 @@ public:
     Q_INVOKABLE void deletePayee(const QString &payeeUid);
     Q_INVOKABLE void deletePayeeAccount(const QString &payeeUid, const QString &accountUid);
     Q_INVOKABLE void refreshPayeeDetail(const QString &payeeUid);
+    Q_INVOKABLE void refreshPayeeImage(const QString &payeeUid);
     Q_INVOKABLE void updatePayeeAccountDescription(const QString &payeeUid,
                                                    const QString &payeeAccountUid,
                                                    const QString &description);
@@ -411,6 +416,7 @@ signals:
     void profileImageDeleted();
     void payeeAccountPaymentsChanged();
     void payeeAccountScheduledPaymentsChanged();
+    void payeeImageChanged();
 
 private:
     // helpers
@@ -457,6 +463,7 @@ private:
     void transferSavingsGoalMoney(const QString &savingsGoalUid, const QString &amount, bool addMoney);
     bool verifyPinValue(const QString &pin) const;
     bool validateNewPin(const QString &pin, const QString &confirmPin, QString *error) const;
+    bool m_payeeImageAvailable = false;
     QString formatMinorUnits(qint64 minorUnits, const QString &currencyCode) const;
     QString formatIsoDateTime(const QString &isoString) const;
     QString signedAmountString(const QString &direction,
@@ -472,6 +479,7 @@ private:
     QString formatSortCode(const QString &sortCode) const;
     QString m_pendingAction;
     QString hashPin(const QString &pin, const QString &salt) const;
+    QString m_payeeImagePath;
 
     QVariantList m_payees;
     QVariantList m_cards;

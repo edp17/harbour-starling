@@ -78,6 +78,117 @@ bool StarlingClient::localFileExists(const QString &filePath) const
 }
 
 // Payee Account
+QString StarlingClient::payeeImagePath() const
+{
+    return m_payeeImagePath;
+}
+
+bool StarlingClient::payeeImageAvailable() const
+{
+    return m_payeeImageAvailable;
+}
+
+void StarlingClient::refreshPayeeImage(const QString &payeeUid)
+{
+    const QString trimmedPayeeUid = payeeUid.trimmed();
+
+    if (trimmedPayeeUid.isEmpty()) {
+        m_payeeImageAvailable = false;
+        m_payeeImagePath.clear();
+        emit payeeImageChanged();
+        setStatus(QStringLiteral("Payee ID is missing."));
+        return;
+    }
+
+    const QString path =
+            QStringLiteral("/api/v2/payees/%1/image")
+            .arg(trimmedPayeeUid);
+
+    QUrl url(QString::fromLatin1(BASE_URL) + path);
+
+    QNetworkRequest req(url);
+    req.setRawHeader("Authorization", QByteArray("Bearer ") + m_token.toUtf8());
+
+    setStatus(QStringLiteral("Loading payee image..."));
+    beginRequest();
+
+    QNetworkReply *rep = m_nam.get(req);
+
+    connect(rep, &QNetworkReply::finished, this, [this, rep, trimmedPayeeUid]() {
+        const QByteArray body = rep->readAll();
+        const int httpStatus =
+                rep->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+
+        if (rep->error() != QNetworkReply::NoError) {
+            m_payeeImageAvailable = false;
+            m_payeeImagePath.clear();
+            emit payeeImageChanged();
+
+            if (httpStatus == 404) {
+                setStatus(QStringLiteral("No payee image found."));
+            } else {
+                qWarning() << "refreshPayeeImage failed url=" << rep->url()
+                           << "status=" << httpStatus
+                           << "qtError=" << rep->errorString()
+                           << "body=" << QString::fromUtf8(body);
+
+                setStatus(QStringLiteral("Payee image unavailable."));
+            }
+
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        const QString cacheRoot =
+                QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+
+        QDir dir(cacheRoot);
+        if (!dir.exists())
+            dir.mkpath(QStringLiteral("."));
+
+        QString extension = QStringLiteral(".jpg");
+        const QString contentType =
+                rep->header(QNetworkRequest::ContentTypeHeader).toString();
+
+        if (contentType.contains(QStringLiteral("png")))
+            extension = QStringLiteral(".png");
+        else if (contentType.contains(QStringLiteral("webp")))
+            extension = QStringLiteral(".webp");
+        else if (contentType.contains(QStringLiteral("jpeg")) || contentType.contains(QStringLiteral("jpg")))
+            extension = QStringLiteral(".jpg");
+
+        const QString filePath =
+                dir.filePath(QStringLiteral("payee-image-%1%2")
+                             .arg(trimmedPayeeUid.left(8))
+                             .arg(extension));
+
+        QFile file(filePath);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            m_payeeImageAvailable = false;
+            m_payeeImagePath.clear();
+            emit payeeImageChanged();
+
+            setStatus(QStringLiteral("Could not save payee image."));
+            rep->deleteLater();
+            endRequest();
+            return;
+        }
+
+        file.write(body);
+        file.close();
+
+        m_payeeImagePath = filePath;
+        m_payeeImageAvailable = true;
+        emit payeeImageChanged();
+
+        setStatus(QStringLiteral("Payee image loaded."));
+
+        rep->deleteLater();
+        endRequest();
+    });
+}
+
 QVariantList StarlingClient::payeeAccountScheduledPayments() const
 {
     return m_payeeAccountScheduledPayments;
