@@ -83,6 +83,7 @@ class StarlingClient : public QObject
     Q_PROPERTY(QString profileImagePath READ profileImagePath NOTIFY profileImageChanged)
     Q_PROPERTY(bool profileImageAvailable READ profileImageAvailable NOTIFY profileImageChanged)
     Q_PROPERTY(QVariantList payeeAccountPayments READ payeeAccountPayments NOTIFY payeeAccountPaymentsChanged)
+    Q_PROPERTY(QVariantList payeeAccountScheduledPayments READ payeeAccountScheduledPayments NOTIFY payeeAccountScheduledPaymentsChanged)
 
 public:
     explicit StarlingClient(QObject *parent = nullptr);
@@ -138,6 +139,7 @@ public:
     QVariantList transactionAttachments() const;
     QVariantList transactionReceipts() const;
     QVariantList payeeAccountPayments() const;
+    QVariantList payeeAccountScheduledPayments() const;
     bool busy() const;
     bool pinEnabled() const;
     bool pinPromptVisible() const;
@@ -340,6 +342,8 @@ public:
     Q_INVOKABLE bool isSupportedProfileImageFile(const QString &filePath) const;
     Q_INVOKABLE void refreshPayeeAccountPayments(const QString &payeeUid,
                                                  const QString &payeeAccountUid);
+    Q_INVOKABLE void refreshPayeeAccountScheduledPayments(const QString &payeeUid,
+                                                          const QString &payeeAccountUid);
 
 signals:
     void tokenChanged();
@@ -406,6 +410,7 @@ signals:
     void profileImageUpdated();
     void profileImageDeleted();
     void payeeAccountPaymentsChanged();
+    void payeeAccountScheduledPaymentsChanged();
 
 private:
     // helpers
@@ -560,6 +565,7 @@ private:
     QVariantList m_transactionAttachments;
     QVariantList m_transactionReceipts;
     QVariantList m_payeeAccountPayments;
+    QVariantList m_payeeAccountScheduledPayments;
     QVariantMap m_payeeDetail;
     QVariantMap m_paymentDraft;
     QVariantMap m_transactionDetail;

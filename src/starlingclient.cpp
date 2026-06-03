@@ -78,9 +78,131 @@ bool StarlingClient::localFileExists(const QString &filePath) const
 }
 
 // Payee Account
+QVariantList StarlingClient::payeeAccountScheduledPayments() const
+{
+    return m_payeeAccountScheduledPayments;
+}
+
 QVariantList StarlingClient::payeeAccountPayments() const
 {
     return m_payeeAccountPayments;
+}
+
+void StarlingClient::refreshPayeeAccountScheduledPayments(const QString &payeeUid,
+                                                          const QString &payeeAccountUid)
+{
+    const QString trimmedPayeeUid = payeeUid.trimmed();
+    const QString trimmedAccountUid = payeeAccountUid.trimmed();
+
+    if (trimmedPayeeUid.isEmpty() || trimmedAccountUid.isEmpty()) {
+        setStatus(QStringLiteral("Payee account details are missing."));
+        return;
+    }
+
+    m_payeeAccountScheduledPayments.clear();
+    emit payeeAccountScheduledPaymentsChanged();
+
+    const QString path =
+            QStringLiteral("/api/v2/payees/%1/account/%2/scheduled-payments")
+            .arg(trimmedPayeeUid)
+            .arg(trimmedAccountUid);
+
+    setStatus(QStringLiteral("Loading scheduled payments..."));
+
+    getJson(path, [this](const QByteArray &body) {
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        const QJsonObject root = doc.object();
+
+        QJsonArray items = root.value(QStringLiteral("scheduledPayments")).toArray();
+
+        if (items.isEmpty())
+            items = root.value(QStringLiteral("payments")).toArray();
+
+        if (items.isEmpty())
+            items = root.value(QStringLiteral("paymentOrders")).toArray();
+
+        QVariantList rows;
+
+        for (int i = 0; i < items.size(); ++i) {
+            const QJsonObject item = items.at(i).toObject();
+
+//            qWarning() << "payee scheduled payment item="
+//                       << QJsonDocument(item).toJson(QJsonDocument::Compact);
+
+            const QJsonObject amount = item.value(QStringLiteral("amount")).toObject();
+            const QJsonObject paymentAmount = item.value(QStringLiteral("paymentAmount")).toObject();
+            const QJsonObject nextPaymentAmount = item.value(QStringLiteral("nextPaymentAmount")).toObject();
+
+            const QJsonObject money = !nextPaymentAmount.isEmpty()
+                    ? nextPaymentAmount
+                    : (!amount.isEmpty() ? amount : paymentAmount);
+
+            const QString currency =
+                    money.value(QStringLiteral("currency")).toString(QStringLiteral("GBP"));
+            const qint64 minor =
+                    money.value(QStringLiteral("minorUnits")).toVariant().toLongLong();
+
+            QVariantMap row;
+
+            row.insert(QStringLiteral("paymentOrderUid"),
+                       item.value(QStringLiteral("paymentOrderUid")).toString(
+                           item.value(QStringLiteral("uid")).toString()));
+
+            const QString nextPaymentDate =
+                    item.value(QStringLiteral("nextDate")).toString(
+                        item.value(QStringLiteral("paymentDate")).toString(
+                            item.value(QStringLiteral("scheduledDate")).toString(
+                                item.value(QStringLiteral("date")).toString())));
+
+            if (nextPaymentDate.isEmpty())
+                continue;
+
+            row.insert(QStringLiteral("date"), nextPaymentDate);
+
+            row.insert(QStringLiteral("createdAt"),
+                       formatIsoDateTime(item.value(QStringLiteral("createdAt")).toString()));
+
+            row.insert(QStringLiteral("amount"),
+                       minor > 0 ? formatMinorUnits(minor, currency) : QString());
+
+            row.insert(QStringLiteral("reference"),
+                       item.value(QStringLiteral("reference")).toString());
+
+            row.insert(QStringLiteral("status"),
+                       item.value(QStringLiteral("status")).toString());
+
+            const QJsonObject recurrence =
+                    item.value(QStringLiteral("recurrenceRule")).toObject();
+
+            row.insert(QStringLiteral("frequency"),
+                       recurrence.value(QStringLiteral("frequency")).toString(
+                           item.value(QStringLiteral("frequency")).toString()));
+
+            row.insert(QStringLiteral("interval"),
+                       recurrence.value(QStringLiteral("interval")).toVariant().toString());
+
+            row.insert(QStringLiteral("count"),
+                       recurrence.value(QStringLiteral("count")).toVariant().toString());
+
+            row.insert(QStringLiteral("untilDate"),
+                       recurrence.value(QStringLiteral("untilDate")).toString());
+
+            row.insert(QStringLiteral("paymentType"),
+                       item.value(QStringLiteral("paymentType")).toString());
+
+            row.insert(QStringLiteral("spendingCategory"),
+                       item.value(QStringLiteral("spendingCategory")).toString());
+
+            rows.append(row);
+        }
+
+        m_payeeAccountScheduledPayments = rows;
+        emit payeeAccountScheduledPaymentsChanged();
+
+        setStatus(rows.isEmpty()
+                  ? QStringLiteral("No scheduled payments found.")
+                  : QStringLiteral("Loaded %1 scheduled payment(s).").arg(rows.size()));
+    });
 }
 
 void StarlingClient::refreshPayeeAccountPayments(const QString &payeeUid,
