@@ -190,8 +190,8 @@ Page {
                         Label {
                             width: parent.width
                             text: qsTr("Payee")
-                            color: Theme.secondaryHighlightColor
-                            font.pixelSize: Theme.fontSizeExtraSmall
+                            color: Theme.highlightColor
+                            font.pixelSize: Theme.fontSizeSmall
                         }
 
                         Label {
@@ -297,7 +297,7 @@ Page {
 
                                 Label {
                                     width: parent.width
-                                    text: qsTr("Sort code / bank identifier")
+                                    text: qsTr("Sort code / bank id.")
                                     color: Theme.secondaryHighlightColor
                                     font.pixelSize: Theme.fontSizeExtraSmall
                                 }
@@ -421,7 +421,7 @@ Page {
 
                                 text: qsTr("Scheduled payments")
                                 color: Theme.highlightColor
-                                font.pixelSize: Theme.fontSizeMedium
+                                font.pixelSize: Theme.fontSizeSmall
                                 truncationMode: TruncationMode.Fade
                             }
 
@@ -604,7 +604,7 @@ Page {
 
                                 text: qsTr("Payment history")
                                 color: Theme.highlightColor
-                                font.pixelSize: Theme.fontSizeMedium
+                                font.pixelSize: Theme.fontSizeSmall
                                 truncationMode: TruncationMode.Fade
                             }
 

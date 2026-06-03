@@ -74,9 +74,9 @@ Page {
                 width: parent.width - Theme.horizontalPageMargin * 2
                 height: overviewColumn.height + Theme.paddingMedium * 2
                 radius: Theme.paddingMedium
-                color: Theme.rgba(Theme.highlightBackgroundColor, 0.10)
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
                 border.width: 1
-                border.color: Theme.rgba(Theme.highlightColor, 0.18)
+                border.color: Theme.rgba(Theme.highlightColor, 0.15)
 
                 Column {
                     id: overviewColumn
@@ -97,6 +97,7 @@ Page {
                         width: parent.width
                         text: qsTr("Harbour Starling is a Sailfish OS client for managing your Starling Bank account using Personal Access Tokens.")
                         color: Theme.primaryColor
+                        font.pixelSize: Theme.fontSizeExtraSmall
                         wrapMode: Text.Wrap
                     }
                 }
@@ -107,9 +108,9 @@ Page {
                 width: parent.width - Theme.horizontalPageMargin * 2
                 height: featuresColumn.height + Theme.paddingMedium * 2
                 radius: Theme.paddingMedium
-                color: Theme.rgba(Theme.highlightBackgroundColor, 0.10)
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
                 border.width: 1
-                border.color: Theme.rgba(Theme.highlightColor, 0.18)
+                border.color: Theme.rgba(Theme.highlightColor, 0.15)
 
                 Column {
                     id: featuresColumn
@@ -130,6 +131,7 @@ Page {
                         width: parent.width
                         text: qsTr("• View account balance and details\n• Browse transactions and activity\n• Manage payees and their accounts\n• Make payments with full review and confirmation\n• Control card settings and view card details\n• Store physical card details securely on-device\n• App PIN protection with automatic locking")
                         color: Theme.primaryColor
+                        font.pixelSize: Theme.fontSizeExtraSmall
                         wrapMode: Text.Wrap
                     }
                 }
@@ -140,9 +142,9 @@ Page {
                 width: parent.width - Theme.horizontalPageMargin * 2
                 height: securityColumn.height + Theme.paddingMedium * 2
                 radius: Theme.paddingMedium
-                color: Theme.rgba(Theme.highlightBackgroundColor, 0.10)
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
                 border.width: 1
-                border.color: Theme.rgba(Theme.highlightColor, 0.18)
+                border.color: Theme.rgba(Theme.highlightColor, 0.15)
 
                 Column {
                     id: securityColumn
@@ -163,6 +165,7 @@ Page {
                         width: parent.width
                         text: qsTr("Sensitive data such as tokens, API keys and card details are stored securely on-device. Critical actions like payments and access to sensitive information require App PIN confirmation.")
                         color: Theme.primaryColor
+                        font.pixelSize: Theme.fontSizeExtraSmall
                         wrapMode: Text.Wrap
                     }
                 }
@@ -173,9 +176,9 @@ Page {
                 width: parent.width - Theme.horizontalPageMargin * 2
                 height: notesColumn.height + Theme.paddingMedium * 2
                 radius: Theme.paddingMedium
-                color: Theme.rgba(Theme.highlightBackgroundColor, 0.10)
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
                 border.width: 1
-                border.color: Theme.rgba(Theme.highlightColor, 0.18)
+                border.color: Theme.rgba(Theme.highlightColor, 0.15)
 
                 Column {
                     id: notesColumn
@@ -196,6 +199,7 @@ Page {
                         width: parent.width
                         text: qsTr("This application is not affiliated with or endorsed by Starling Bank. Use it at your own discretion and keep your Personal Access Tokens secure.")
                         color: Theme.primaryColor
+                        font.pixelSize: Theme.fontSizeExtraSmall
                         wrapMode: Text.Wrap
                     }
                 }
@@ -206,9 +210,9 @@ Page {
                 width: parent.width - Theme.horizontalPageMargin * 2
                 height: developerColumn.height + Theme.paddingMedium * 2
                 radius: Theme.paddingMedium
-                color: Theme.rgba(Theme.highlightBackgroundColor, 0.10)
+                color: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
                 border.width: 1
-                border.color: Theme.rgba(Theme.highlightColor, 0.18)
+                border.color: Theme.rgba(Theme.highlightColor, 0.15)
 
                 Column {
                     id: developerColumn
@@ -229,7 +233,7 @@ Page {
                         width: parent.width
                         text: qsTr("Developed by: edp17")
                         color: Theme.secondaryColor
-                        font.pixelSize: Theme.fontSizeSmall
+                        font.pixelSize: Theme.fontSizeExtraSmall
                         wrapMode: Text.Wrap
                     }
 
@@ -237,7 +241,7 @@ Page {
                         width: parent.width
                         text: qsTr("This project is licensed under GNU GPL 3.0 or later.\nCopyright (c) 2026 edp17.")
                         color: Theme.secondaryColor
-                        font.pixelSize: Theme.fontSizeSmall
+                        font.pixelSize: Theme.fontSizeExtraSmall
                         wrapMode: Text.Wrap
                     }
                 }

@@ -322,8 +322,7 @@ Page {
                         width: parent.width
                         text: qsTr("Stored details")
                         color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeMedium
-                        font.bold: true
+                        font.pixelSize: Theme.fontSizeSmall
                         wrapMode: Text.Wrap
                     }
 
@@ -331,7 +330,7 @@ Page {
                         width: parent.width
                         text: qsTr("Store your physical card details securely on-device. Adding, changing or deleting them requires App PIN confirmation.")
                         color: Theme.secondaryHighlightColor
-                        font.pixelSize: Theme.fontSizeSmall
+                        font.pixelSize: Theme.fontSizeExtraSmall
                         wrapMode: Text.Wrap
                     }
 
@@ -340,7 +339,7 @@ Page {
                         visible: !page.storedCardPresent && !page.storedCvvPresent && !page.storedPinPresent && !page.editingCard
                         text: qsTr("No physical card details are stored yet.")
                         color: Theme.secondaryColor
-                        font.pixelSize: Theme.fontSizeSmall
+                        font.pixelSize: Theme.fontSizeExtraSmall
                         wrapMode: Text.Wrap
                     }
                     Column {
@@ -489,8 +488,7 @@ Page {
                         width: parent.width
                         text: qsTr("Actions")
                         color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeMedium
-                        font.bold: true
+                        font.pixelSize: Theme.fontSizeSmall
                         wrapMode: Text.Wrap
                     }
 
@@ -554,8 +552,7 @@ Page {
                         width: parent.width
                         text: page.storedCardPresent ? qsTr("Edit card") : qsTr("Add card")
                         color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeMedium
-                        font.bold: true
+                        font.pixelSize: Theme.fontSizeSmall
                         wrapMode: Text.Wrap
                     }
 

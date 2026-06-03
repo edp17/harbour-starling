@@ -234,8 +234,8 @@ Page {
                         Label {
                             width: parent.width
                             text: qsTr("Payee")
-                            color: Theme.secondaryHighlightColor
-                            font.pixelSize: Theme.fontSizeExtraSmall
+                            color: Theme.highlightColor
+                            font.pixelSize: Theme.fontSizeSmall
                         }
 
                         TextField {
@@ -287,7 +287,7 @@ Page {
                             width: parent.width
                             text: qsTr("Payee image")
                             color: Theme.highlightColor
-                            font.pixelSize: Theme.fontSizeMedium
+                            font.pixelSize: Theme.fontSizeSmall
                             wrapMode: Text.Wrap
                             truncationMode: TruncationMode.Fade
                         }

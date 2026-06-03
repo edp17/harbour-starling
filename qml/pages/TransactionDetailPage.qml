@@ -681,7 +681,6 @@ Page {
                                       ? modelData.name
                                       : qsTr("Receipt")
                                 color: Theme.primaryColor
-                                font.bold: true
                                 wrapMode: Text.Wrap
                             }
 
@@ -724,7 +723,6 @@ Page {
                         text: qsTr("Card transaction details")
                         color: Theme.highlightColor
                         font.pixelSize: Theme.fontSizeMedium
-                        font.bold: true
                     }
 
                     Label {

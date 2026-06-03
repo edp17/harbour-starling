@@ -69,8 +69,7 @@ Page {
                         width: parent.width
                         text: qsTr("Export transactions")
                         color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeLarge
-                        font.bold: true
+                        font.pixelSize: Theme.fontSizeSmall
                     }
 
                     Label {
@@ -78,7 +77,7 @@ Page {
                         text: qsTr("Save your transactions for the selected date range as a CSV file. You can open it later with a spreadsheet app.")
                         color: Theme.secondaryColor
                         wrapMode: Text.Wrap
-                        font.pixelSize: Theme.fontSizeSmall
+                        font.pixelSize: Theme.fontSizeExtraSmall
                     }
 
                     TextField {
@@ -116,18 +115,18 @@ Page {
                 text: qsTr("Last saved:\n%1").arg(starlingClient.lastFeedExportCsvPath)
                 color: Theme.secondaryColor
                 wrapMode: Text.WrapAnywhere
-                font.pixelSize: Theme.fontSizeSmall
-            }
-
-            Label {
-                x: Theme.horizontalPageMargin
-                width: parent.width - 2 * x
-                visible: starlingClient.status.length > 0
-                text: starlingClient.status
-                color: Theme.secondaryColor
-                wrapMode: Text.Wrap
                 font.pixelSize: Theme.fontSizeExtraSmall
             }
+
+//            Label {
+//                x: Theme.horizontalPageMargin
+//                width: parent.width - 2 * x
+//                visible: starlingClient.status.length > 0
+//                text: starlingClient.status
+//                color: Theme.secondaryColor
+//                wrapMode: Text.Wrap
+//                font.pixelSize: Theme.fontSizeExtraSmall
+//            }
         }
 
         VerticalScrollDecorator {}

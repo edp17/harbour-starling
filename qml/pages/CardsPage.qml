@@ -156,7 +156,7 @@ Page {
                 visible: starlingClient.cards.length > 0 && page.isOnline
                 text: qsTr("Manage your Starling cards and card controls.")
                 color: Theme.secondaryColor
-                font.pixelSize: Theme.fontSizeSmall
+                font.pixelSize: Theme.fontSizeExtraSmall
                 wrapMode: Text.Wrap
             }
         }

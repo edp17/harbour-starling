@@ -132,7 +132,6 @@ Page {
                         text: page.valueOrDash(page.space.name)
                         color: Theme.primaryColor
                         font.pixelSize: Theme.fontSizeLarge
-                        font.bold: true
                         wrapMode: Text.Wrap
                     }
 
@@ -149,6 +148,7 @@ Page {
                         visible: page.space.target && page.space.target.length > 0
                         text: qsTr("Target: %1").arg(page.space.target)
                         color: Theme.secondaryColor
+                        font.pixelSize: Theme.fontSizeSmall
                         wrapMode: Text.Wrap
                     }
                 }
@@ -185,7 +185,7 @@ Page {
 
                             text: qsTr("Round-up")
                             color: Theme.highlightColor
-                            font.pixelSize: Theme.fontSizeMedium
+                            font.pixelSize: Theme.fontSizeSmall
                             truncationMode: TruncationMode.Fade
                         }
 
@@ -210,7 +210,7 @@ Page {
                                && starlingClient.roundUp.roundUpGoalUid === page.space.spaceUid
                                ? Theme.highlightColor
                                : Theme.secondaryColor
-                        font.pixelSize: Theme.fontSizeMedium
+                        font.pixelSize: Theme.fontSizeSmall
                     }
 
                     Label {
@@ -244,7 +244,7 @@ Page {
                         width: parent.width
                         text: qsTr("Details")
                         color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeMedium
+                        font.pixelSize: Theme.fontSizeSmall
                     }
 
                     Label {
@@ -252,6 +252,7 @@ Page {
                         text: qsTr("Type: %1").arg(page.valueOrDash(page.space.type))
                         color: Theme.primaryColor
                         wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall * 0.9
                     }
 
                     Label {
@@ -259,6 +260,7 @@ Page {
                         text: qsTr("State: %1").arg(page.valueOrDash(page.space.state))
                         color: Theme.primaryColor
                         wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall * 0.9
                     }
 
                     Label {
@@ -266,6 +268,7 @@ Page {
                         text: qsTr("Currency: %1").arg(page.valueOrDash(page.space.currency))
                         color: Theme.primaryColor
                         wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall * 0.9
                     }
 
                     Label {
@@ -273,7 +276,7 @@ Page {
                         text: qsTr("Created: %1").arg(page.valueOrDash(page.space.createdAt))
                         color: Theme.secondaryColor
                         wrapMode: Text.Wrap
-                        font.pixelSize: Theme.fontSizeSmall
+                        font.pixelSize: Theme.fontSizeSmall * 0.9
                     }
 
                     Label {
@@ -281,7 +284,7 @@ Page {
                         text: qsTr("Updated: %1").arg(page.valueOrDash(page.space.updatedAt))
                         color: Theme.secondaryColor
                         wrapMode: Text.Wrap
-                        font.pixelSize: Theme.fontSizeSmall
+                        font.pixelSize: Theme.fontSizeSmall * 0.9
                     }
                 }
             }
@@ -308,7 +311,7 @@ Page {
                         width: parent.width
                         text: qsTr("Actions")
                         color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeMedium
+                        font.pixelSize: Theme.fontSizeSmall
                     }
 
                     Label {
@@ -316,7 +319,7 @@ Page {
                         text: qsTr("Move money in or out of this savings goal.")
                         color: Theme.secondaryColor
                         wrapMode: Text.Wrap
-                        font.pixelSize: Theme.fontSizeSmall
+                        font.pixelSize: Theme.fontSizeExtraSmall
                     }
 
                     TextField {
@@ -349,15 +352,15 @@ Page {
                 }
             }
 
-            Label {
-                x: Theme.horizontalPageMargin
-                width: parent.width - 2 * x
-                visible: page.pageError.length > 0 || starlingClient.status.length > 0
-                text: page.pageError.length > 0 ? page.pageError : starlingClient.status
-                color: page.pageError.length > 0 ? Theme.errorColor : Theme.secondaryColor
-                wrapMode: Text.Wrap
-                font.pixelSize: Theme.fontSizeSmall
-            }
+//            Label {
+//                x: Theme.horizontalPageMargin
+//                width: parent.width - 2 * x
+//                visible: page.pageError.length > 0 || starlingClient.status.length > 0
+//                text: page.pageError.length > 0 ? page.pageError : starlingClient.status
+//                color: page.pageError.length > 0 ? Theme.errorColor : Theme.secondaryColor
+//                wrapMode: Text.Wrap
+//                font.pixelSize: Theme.fontSizeSmall
+//            }
 
             Rectangle {
                 // Delete card
@@ -381,7 +384,7 @@ Page {
                         width: parent.width
                         text: qsTr("Delete")
                         color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeMedium
+                        font.pixelSize: Theme.fontSizeSmall
                     }
 
                     Label {
@@ -389,7 +392,7 @@ Page {
                         text: qsTr("Delete this savings goal when you no longer need it.")
                         color: Theme.secondaryColor
                         wrapMode: Text.Wrap
-                        font.pixelSize: Theme.fontSizeSmall
+                        font.pixelSize: Theme.fontSizeExtraSmall
                     }
 
                     Label {
@@ -398,7 +401,7 @@ Page {
                         text: qsTr("Withdraw all money before deleting this savings goal.")
                         color: Theme.errorColor
                         wrapMode: Text.Wrap
-                        font.pixelSize: Theme.fontSizeSmall
+                        font.pixelSize: Theme.fontSizeExtraSmall
                     }
 
                     Button {

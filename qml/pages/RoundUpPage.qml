@@ -119,8 +119,7 @@ Page {
                         width: parent.width
                         text: qsTr("Round-up status")
                         color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeMedium
-                        font.bold: true
+                        font.pixelSize: Theme.fontSizeSmall
                     }
 
                     Label {
@@ -129,8 +128,7 @@ Page {
                               ? qsTr("Active")
                               : qsTr("Not active")
                         color: starlingClient.roundUp.active ? Theme.highlightColor : Theme.secondaryColor
-                        font.pixelSize: Theme.fontSizeLarge
-                        font.bold: true
+                        font.pixelSize: Theme.fontSizeMedium
                     }
 
                     Label {
@@ -167,7 +165,7 @@ Page {
                         text: qsTr("Round-up automatically saves the spare change from card transactions into a savings goal.")
                         color: Theme.secondaryColor
                         wrapMode: Text.Wrap
-                        font.pixelSize: Theme.fontSizeSmall
+                        font.pixelSize: Theme.fontSizeExtraSmall
                     }
                 }
             }
@@ -195,8 +193,7 @@ Page {
                         width: parent.width
                         text: qsTr("Enable round-up")
                         color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeMedium
-                        font.bold: true
+                        font.pixelSize: Theme.fontSizeSmall
                     }
 
                     Label {
@@ -204,7 +201,7 @@ Page {
                         text: qsTr("Choose which savings goal should receive your spare change.")
                         color: Theme.secondaryColor
                         wrapMode: Text.Wrap
-                        font.pixelSize: Theme.fontSizeSmall
+                        font.pixelSize: Theme.fontSizeExtraSmall
                     }
 
                     ComboBox {
@@ -215,7 +212,7 @@ Page {
                         currentIndex: -1
                         value: page.selectedSpace()
                                ? page.selectedSpaceName(page.selectedSpace(), page.selectedSpaceIndex)
-                               : qsTr("Choose savings goal")
+                               : qsTr("Select...")
 
                         menu: ContextMenu {
                             Repeater {
@@ -236,7 +233,7 @@ Page {
                         width: parent.width
                         label: qsTr("Multiplier")
                         currentIndex: -1
-                        value: page.selectedMultiplier > 0 ? ("x" + page.selectedMultiplier) : qsTr("Choose multiplier")
+                        value: page.selectedMultiplier > 0 ? ("x" + page.selectedMultiplier) : qsTr("Select...")
 
                         menu: ContextMenu {
                             MenuItem { text: "x1" }
@@ -267,7 +264,7 @@ Page {
                         text: qsTr("Create a savings goal first, then enable round-up.")
                         color: Theme.secondaryColor
                         wrapMode: Text.Wrap
-                        font.pixelSize: Theme.fontSizeSmall
+                        font.pixelSize: Theme.fontSizeExtraSmall
                     }
                 }
             }
@@ -294,8 +291,7 @@ Page {
                         width: parent.width
                         text: qsTr("Disable round-up")
                         color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeMedium
-                        font.bold: true
+                        font.pixelSize: Theme.fontSizeSmall
                     }
 
                     Label {
@@ -303,7 +299,7 @@ Page {
                         text: qsTr("This stops spare change from card payments being moved into your savings goal.")
                         color: Theme.secondaryColor
                         wrapMode: Text.Wrap
-                        font.pixelSize: Theme.fontSizeSmall
+                        font.pixelSize: Theme.fontSizeExtraSmall
                     }
 
                     Button {
@@ -315,15 +311,15 @@ Page {
                 }
             }
 
-            Label {
-                x: Theme.horizontalPageMargin
-                width: parent.width - 2 * x
-                visible: starlingClient.status.length > 0
-                text: starlingClient.status
-                color: Theme.secondaryColor
-                wrapMode: Text.Wrap
-                font.pixelSize: Theme.fontSizeExtraSmall
-            }
+//            Label {
+//                x: Theme.horizontalPageMargin
+//                width: parent.width - 2 * x
+//                visible: starlingClient.status.length > 0
+//                text: starlingClient.status
+//                color: Theme.secondaryColor
+//                wrapMode: Text.Wrap
+//                font.pixelSize: Theme.fontSizeExtraSmall
+//            }
         }
 
         VerticalScrollDecorator {}

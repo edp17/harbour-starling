@@ -83,8 +83,7 @@ Page {
                         width: parent.width
                         text: qsTr("Create a savings goal")
                         color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeLarge
-                        font.bold: true
+                        font.pixelSize: Theme.fontSizeSmall
                     }
 
                     Label {
@@ -92,7 +91,7 @@ Page {
                         text: qsTr("Choose a goal type, set a target amount, and Starling will create a new savings space for it.")
                         color: Theme.secondaryColor
                         wrapMode: Text.Wrap
-                        font.pixelSize: Theme.fontSizeSmall
+                        font.pixelSize: Theme.fontSizeExtraSmall
                     }
 
                     ComboBox {
@@ -158,15 +157,15 @@ Page {
                 }
             }
 
-            Label {
-                x: Theme.horizontalPageMargin
-                width: parent.width - 2 * x
-                visible: starlingClient.status.length > 0
-                text: starlingClient.status
-                color: Theme.secondaryColor
-                wrapMode: Text.Wrap
-                font.pixelSize: Theme.fontSizeExtraSmall
-            }
+//            Label {
+//                x: Theme.horizontalPageMargin
+//                width: parent.width - 2 * x
+//                visible: starlingClient.status.length > 0
+//                text: starlingClient.status
+//                color: Theme.secondaryColor
+//                wrapMode: Text.Wrap
+//                font.pixelSize: Theme.fontSizeExtraSmall
+//            }
         }
 
         VerticalScrollDecorator {}

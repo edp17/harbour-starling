@@ -1,7 +1,7 @@
 Name:       harbour-starling
 Summary:    Starling Bank Sailfish OS client
 Version:    1.1.0
-Release:    35
+Release:    36
 License:    MIT
 URL:        https://example.invalid/harbour-starling
 Source0:    %{name}-%{version}.tar.bz2

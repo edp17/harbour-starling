@@ -164,7 +164,6 @@ Page {
                         text: page.valueOrDash(page.payment.title)
                         color: Theme.primaryColor
                         font.pixelSize: Theme.fontSizeLarge
-                        font.bold: true
                         wrapMode: Text.Wrap
                     }
 
@@ -174,7 +173,6 @@ Page {
                         text: page.valueOrDash(page.payment.amount)
                         color: Theme.highlightColor
                         font.pixelSize: Theme.fontSizeMedium
-                        font.bold: true
                     }
 
                     Label {

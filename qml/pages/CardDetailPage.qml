@@ -759,7 +759,7 @@ Page {
                                 width: parent.width
                                 text: qsTr("Cancelled")
                                 color: Theme.secondaryHighlightColor
-                                font.pixelSize: Theme.fontSizeExtraSmall
+                                font.pixelSize: Theme.fontSizeSmall
                             }
 
                             Label {
@@ -778,7 +778,7 @@ Page {
                                 width: parent.width
                                 text: qsTr("Wallet notifications")
                                 color: Theme.secondaryHighlightColor
-                                font.pixelSize: Theme.fontSizeExtraSmall
+                                font.pixelSize: Theme.fontSizeSmall
                             }
 
                             Label {
@@ -822,7 +822,7 @@ Page {
                             width: parent.width
                             text: qsTr("Card present payments")
                             color: Theme.secondaryHighlightColor
-                            font.pixelSize: Theme.fontSizeExtraSmall
+                            font.pixelSize: Theme.fontSizeSmall
                         }
 
                         Label {
@@ -853,7 +853,7 @@ Page {
                             text: page.posHelpText(posEnabledValue)
                             wrapMode: Text.Wrap
                             color: Theme.secondaryColor
-                            font.pixelSize: Theme.fontSizeSmall
+                            font.pixelSize: Theme.fontSizeExtraSmall
                         }
                     }
 
@@ -865,7 +865,7 @@ Page {
                             width: parent.width
                             text: qsTr("ATM withdrawals")
                             color: Theme.secondaryHighlightColor
-                            font.pixelSize: Theme.fontSizeExtraSmall
+                            font.pixelSize: Theme.fontSizeSmall
                         }
 
                         Label {
@@ -896,7 +896,7 @@ Page {
                             text: page.atmHelpText(atmEnabledValue)
                             wrapMode: Text.Wrap
                             color: Theme.secondaryColor
-                            font.pixelSize: Theme.fontSizeSmall
+                            font.pixelSize: Theme.fontSizeExtraSmall
                         }
                     }
 
@@ -908,7 +908,7 @@ Page {
                             width: parent.width
                             text: qsTr("Online payments")
                             color: Theme.secondaryHighlightColor
-                            font.pixelSize: Theme.fontSizeExtraSmall
+                            font.pixelSize: Theme.fontSizeSmall
                         }
 
                         Label {
@@ -939,7 +939,7 @@ Page {
                             text: page.onlineHelpText(onlineEnabledValue)
                             wrapMode: Text.Wrap
                             color: Theme.secondaryColor
-                            font.pixelSize: Theme.fontSizeSmall
+                            font.pixelSize: Theme.fontSizeExtraSmall
                         }
                     }
 
@@ -951,7 +951,7 @@ Page {
                             width: parent.width
                             text: qsTr("Mobile wallet")
                             color: Theme.secondaryHighlightColor
-                            font.pixelSize: Theme.fontSizeExtraSmall
+                            font.pixelSize: Theme.fontSizeSmall
                         }
 
                         Label {
@@ -982,7 +982,7 @@ Page {
                             text: page.mobileWalletHelpText(mobileWalletEnabledValue)
                             wrapMode: Text.Wrap
                             color: Theme.secondaryColor
-                            font.pixelSize: Theme.fontSizeSmall
+                            font.pixelSize: Theme.fontSizeExtraSmall
                         }
                     }
 
@@ -994,7 +994,7 @@ Page {
                             width: parent.width
                             text: qsTr("Magstripe payments")
                             color: Theme.secondaryHighlightColor
-                            font.pixelSize: Theme.fontSizeExtraSmall
+                            font.pixelSize: Theme.fontSizeSmall
                         }
 
                         Label {
@@ -1030,7 +1030,7 @@ Page {
                             text: page.magStripeHelpText(magStripeEnabledValue)
                             wrapMode: Text.Wrap
                             color: Theme.secondaryColor
-                            font.pixelSize: Theme.fontSizeSmall
+                            font.pixelSize: Theme.fontSizeExtraSmall
                         }
                     }
                 }
@@ -1066,7 +1066,7 @@ Page {
                             width: parent.width
                             text: qsTr("Gambling")
                             color: Theme.secondaryHighlightColor
-                            font.pixelSize: Theme.fontSizeExtraSmall
+                            font.pixelSize: Theme.fontSizeSmall
                         }
 
                         Label {
@@ -1098,7 +1098,7 @@ Page {
                             text: qsTr("Gambling to be enabled at: %1").arg(cardData.gamblingToBeEnabledAt)
                             wrapMode: Text.Wrap
                             color: Theme.secondaryColor
-                            font.pixelSize: Theme.fontSizeSmall
+                            font.pixelSize: Theme.fontSizeExtraSmall
                         }
                     }
                 }
@@ -1152,7 +1152,7 @@ Page {
                     text: qsTr("You are unlocking magstripe payments for 48 hours. If you make a magstripe payment your 48 hour unlock period will restart. If you don't they will be locked again.")
                     wrapMode: Text.Wrap
                     color: Theme.primaryColor
-                    font.pixelSize: Theme.fontSizeSmall
+                    font.pixelSize: Theme.fontSizeExtraSmall
                 }
 
                 Row {

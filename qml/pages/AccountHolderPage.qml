@@ -220,7 +220,7 @@ Page {
                             anchors.rightMargin: Theme.paddingMedium
                             anchors.verticalCenter: parent.verticalCenter
 
-                            text: qsTr("Profile image")
+                            text: qsTr("Account holder")
                             color: Theme.highlightColor
                             font.pixelSize: Theme.fontSizeSmall
                             truncationMode: TruncationMode.Fade
@@ -231,8 +231,8 @@ Page {
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
 
-                            width: Theme.itemSizeHuge
-                            text: qsTr("Edit")
+                            width: Theme.itemSizeHuge * 1.6
+                            text: qsTr("Edit image")
                             checked: page.editingProfileImage
                             enabled: !starlingClient.busy
 
@@ -280,6 +280,14 @@ Page {
                         font.pixelSize: Theme.fontSizeSmall
                     }
 
+                    Label {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        visible: page.isOnline && hasText(starlingClient.accountHolderName)
+                        text: starlingClient.accountHolderName
+                        color: Theme.highlightColor
+                        font.pixelSize: Theme.fontSizeMedium
+                        wrapMode: Text.Wrap
+                    }
                     Button {
                         width: parent.width
                         visible: page.editingProfileImage
@@ -350,7 +358,6 @@ Page {
                         text: qsTr("No internet connection")
                         color: Theme.highlightColor
                         font.pixelSize: Theme.fontSizeMedium
-                        font.bold: true
                         wrapMode: Text.Wrap
                         horizontalAlignment: Text.AlignHCenter
                     }
@@ -364,26 +371,6 @@ Page {
                         horizontalAlignment: Text.AlignHCenter
                     }
                 }
-            }
-
-            Label {
-                x: Theme.horizontalPageMargin
-                width: parent.width - 2 * x
-                visible: page.isOnline && hasText(starlingClient.accountHolderName)
-                text: starlingClient.accountHolderName
-                color: Theme.highlightColor
-                font.pixelSize: Theme.fontSizeLarge
-                wrapMode: Text.Wrap
-            }
-
-            Label {
-                x: Theme.horizontalPageMargin
-                width: parent.width - 2 * x
-                visible: page.isOnline
-                text: qsTr("Personal details stored for your Starling account.")
-                color: Theme.secondaryColor
-                font.pixelSize: Theme.fontSizeSmall
-                wrapMode: Text.Wrap
             }
 
             Rectangle {
@@ -402,26 +389,6 @@ Page {
                     y: Theme.paddingMedium
                     width: parent.width - 2 * Theme.paddingMedium
                     spacing: Theme.paddingMedium
-
-                    Column {
-                        width: parent.width
-                        spacing: Theme.paddingSmall / 2
-                        visible: hasText(starlingClient.accountHolderName)
-
-                        Label {
-                            width: parent.width
-                            text: qsTr("Account holder")
-                            color: Theme.secondaryHighlightColor
-                            font.pixelSize: Theme.fontSizeExtraSmall
-                        }
-
-                        Label {
-                            width: parent.width
-                            text: starlingClient.accountHolderName
-                            color: Theme.primaryColor
-                            wrapMode: Text.Wrap
-                        }
-                    }
 
                     Column {
                         width: parent.width
@@ -573,7 +540,6 @@ Page {
                                     text: qsTr("Verify your email address")
                                     color: Theme.highlightColor
                                     font.pixelSize: Theme.fontSizeMedium
-                                    font.bold: true
                                 }
 
                                 Label {
@@ -783,7 +749,6 @@ Page {
                                 text: qsTr("Address update")
                                 color: Theme.highlightColor
                                 font.pixelSize: Theme.fontSizeMedium
-                                font.bold: true
                             }
 
                             Label {
