@@ -310,16 +310,6 @@ Page {
                     }
                 }
             }
-
-//            Label {
-//                x: Theme.horizontalPageMargin
-//                width: parent.width - 2 * x
-//                visible: starlingClient.status.length > 0
-//                text: starlingClient.status
-//                color: Theme.secondaryColor
-//                wrapMode: Text.Wrap
-//                font.pixelSize: Theme.fontSizeExtraSmall
-//            }
         }
 
         VerticalScrollDecorator {}

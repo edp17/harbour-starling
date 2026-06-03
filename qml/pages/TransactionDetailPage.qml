@@ -361,7 +361,7 @@ Page {
                         width: parent.width
                         text: qsTr("Extra details")
                         color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeMedium
+                        font.pixelSize: Theme.fontSizeSmall
                     }
 
                     Label {
@@ -442,7 +442,7 @@ Page {
 
                             text: qsTr("Attachments")
                             color: Theme.highlightColor
-                            font.pixelSize: Theme.fontSizeMedium
+                            font.pixelSize: Theme.fontSizeSmall
                             truncationMode: TruncationMode.Fade
                         }
 
@@ -647,7 +647,7 @@ Page {
                         width: parent.width
                         text: qsTr("Receipts")
                         color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeMedium
+                        font.pixelSize: Theme.fontSizeSmall
                     }
 
                     Label {
@@ -722,7 +722,7 @@ Page {
                         width: parent.width
                         text: qsTr("Card transaction details")
                         color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeMedium
+                        font.pixelSize: Theme.fontSizeSmall
                     }
 
                     Label {
@@ -817,7 +817,7 @@ Page {
 
                             text: qsTr("Category")
                             color: Theme.highlightColor
-                            font.pixelSize: Theme.fontSizeMedium
+                            font.pixelSize: Theme.fontSizeSmall
                             truncationMode: TruncationMode.Fade
                         }
 
@@ -921,7 +921,7 @@ Page {
 
                             text: qsTr("Note")
                             color: Theme.highlightColor
-                            font.pixelSize: Theme.fontSizeMedium
+                            font.pixelSize: Theme.fontSizeSmall
                             truncationMode: TruncationMode.Fade
                         }
 

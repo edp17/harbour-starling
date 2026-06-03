@@ -352,16 +352,6 @@ Page {
                 }
             }
 
-//            Label {
-//                x: Theme.horizontalPageMargin
-//                width: parent.width - 2 * x
-//                visible: page.pageError.length > 0 || starlingClient.status.length > 0
-//                text: page.pageError.length > 0 ? page.pageError : starlingClient.status
-//                color: page.pageError.length > 0 ? Theme.errorColor : Theme.secondaryColor
-//                wrapMode: Text.Wrap
-//                font.pixelSize: Theme.fontSizeSmall
-//            }
-
             Rectangle {
                 // Delete card
                 x: Theme.horizontalPageMargin

@@ -599,7 +599,7 @@ Page {
                                           ? valueOrEmpty(modelData.description)
                                           : qsTr("Account %1").arg(index + 1)
                                     color: Theme.highlightColor
-                                    font.pixelSize: Theme.fontSizeMedium
+                                    font.pixelSize: Theme.fontSizeSmall
                                     truncationMode: TruncationMode.Fade
                                 }
 
