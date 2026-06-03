@@ -237,9 +237,6 @@ void StarlingClient::refreshPayeeAccountScheduledPayments(const QString &payeeUi
         for (int i = 0; i < items.size(); ++i) {
             const QJsonObject item = items.at(i).toObject();
 
-//            qWarning() << "payee scheduled payment item="
-//                       << QJsonDocument(item).toJson(QJsonDocument::Compact);
-
             const QJsonObject amount = item.value(QStringLiteral("amount")).toObject();
             const QJsonObject paymentAmount = item.value(QStringLiteral("paymentAmount")).toObject();
             const QJsonObject nextPaymentAmount = item.value(QStringLiteral("nextPaymentAmount")).toObject();
@@ -1787,19 +1784,23 @@ void StarlingClient::refreshDirectDebitPayments(const QString &mandateUid)
                 rep->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
 
         if (rep->error() != QNetworkReply::NoError) {
-            qWarning() << "refreshDirectDebitPayments failed url=" << rep->url()
-                       << "status=" << httpStatus
-                       << "qtError=" << rep->errorString()
-                       << "body=" << QString::fromUtf8(body);
-
             m_directDebitPayments.clear();
             emit directDebitPaymentsChanged();
 
             if (httpStatus == 400) {
                 setStatus(QStringLiteral("No Direct Debit payments found."));
-            } else {
-                setStatus(QStringLiteral("Direct Debit payment history unavailable."));
+
+                rep->deleteLater();
+                endRequest();
+                return;
             }
+
+            qWarning() << "refreshDirectDebitPayments failed url=" << rep->url()
+                       << "status=" << httpStatus
+                       << "qtError=" << rep->errorString()
+                       << "body=" << QString::fromUtf8(body);
+
+            setStatus(QStringLiteral("Direct Debit payment history unavailable."));
 
             rep->deleteLater();
             endRequest();

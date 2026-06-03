@@ -39,6 +39,7 @@ Page {
     property bool accountLoading: payeeUid.length > 0 && valueOrEmpty(accountData.payeeAccountUid).length === 0
     property bool showPaymentHistory: false
     property bool showScheduledPayments: false
+    property bool showLastReferences: false
 
     function valueOrEmpty(v) {
         return (v === undefined || v === null) ? "" : String(v)
@@ -362,21 +363,56 @@ Page {
                             spacing: Theme.paddingSmall / 2
                             visible: accountData.lastReferences && accountData.lastReferences.length > 0
 
+                            Item {
+                                width: parent.width
+                                height: Math.max(lastReferencesTitle.height, showReferencesSwitch.height)
+
+                                Label {
+                                    id: lastReferencesTitle
+                                    anchors.left: parent.left
+                                    anchors.right: showReferencesSwitch.left
+                                    anchors.rightMargin: Theme.paddingMedium
+                                    anchors.verticalCenter: parent.verticalCenter
+
+                                    text: qsTr("Last references")
+                                    color: Theme.secondaryHighlightColor
+                                    font.pixelSize: Theme.fontSizeExtraSmall
+                                    truncationMode: TruncationMode.Fade
+                                }
+
+                                TextSwitch {
+                                    id: showReferencesSwitch
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+
+                                    width: Theme.itemSizeHuge * 1.2
+                                    text: qsTr("Show")
+                                    checked: page.showLastReferences
+
+                                    onCheckedChanged: {
+                                        page.showLastReferences = checked
+                                    }
+                                }
+                            }
+
                             Label {
                                 width: parent.width
-                                text: qsTr("Last references")
-                                color: Theme.secondaryHighlightColor
-                                font.pixelSize: Theme.fontSizeExtraSmall
+                                visible: !page.showLastReferences
+                                text: qsTr("%1 reference(s) available").arg(accountData.lastReferences.length)
+                                color: Theme.secondaryColor
+                                font.pixelSize: Theme.fontSizeSmall
+                                wrapMode: Text.Wrap
                             }
 
                             Repeater {
-                                model: accountData.lastReferences || []
+                                model: page.showLastReferences ? (accountData.lastReferences || []) : []
 
                                 delegate: Label {
                                     width: accountDetailsColumn.width
                                     text: valueOrEmpty(modelData)
                                     wrapMode: Text.Wrap
                                     color: Theme.primaryColor
+                                    font.pixelSize: Theme.fontSizeSmall
                                 }
                             }
                         }

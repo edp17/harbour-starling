@@ -59,53 +59,108 @@ Page {
                     width: parent.width - 2 * Theme.paddingMedium
                     spacing: Theme.paddingSmall
 
-                    Label {
+                    Column {
                         width: parent.width
-                        text: qsTr("Details")
-                        color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeSmall
-                    }
-
-                    Label {
-                        width: parent.width
+                        spacing: Theme.paddingSmall / 2
                         visible: (page.paymentData.amount || "").length > 0
-                        text: qsTr("Amount: %1").arg(page.valueOrDash(page.paymentData.amount))
-                        color: Theme.primaryColor
-                        font.pixelSize: Theme.fontSizeSmall
-                        wrapMode: Text.Wrap
+
+                        Label {
+                            width: parent.width
+                            text: qsTr("Amount")
+                            color: Theme.secondaryHighlightColor
+                            font.pixelSize: Theme.fontSizeExtraSmall
+                        }
+
+                        Label {
+                            width: parent.width
+                            text: page.valueOrDash(page.paymentData.amount)
+                            color: Theme.highlightColor
+                            font.pixelSize: Theme.fontSizeSmall
+                            wrapMode: Text.Wrap
+                        }
                     }
 
-                    Label {
+                    Column {
                         width: parent.width
-                        text: qsTr("Reference: %1").arg(page.valueOrDash(page.paymentData.reference))
-                        color: Theme.primaryColor
-                        font.pixelSize: Theme.fontSizeSmall
-                        wrapMode: Text.Wrap
+                        spacing: Theme.paddingSmall / 2
+
+                        Label {
+                            width: parent.width
+                            text: qsTr("Reference")
+                            color: Theme.secondaryHighlightColor
+                            font.pixelSize: Theme.fontSizeExtraSmall
+                        }
+
+                        Label {
+                            width: parent.width
+                            text: page.valueOrDash(page.paymentData.reference)
+                            color: Theme.primaryColor
+                            font.pixelSize: Theme.fontSizeSmall
+                            wrapMode: Text.Wrap
+                        }
                     }
 
-                    Label {
+                    Column {
                         width: parent.width
+                        spacing: Theme.paddingSmall / 2
                         visible: (page.paymentData.spendingCategory || "").length > 0
-                        text: qsTr("Category: %1").arg(page.paymentData.spendingCategory)
-                        color: Theme.primaryColor
-                        font.pixelSize: Theme.fontSizeSmall
-                        wrapMode: Text.Wrap
+
+                        Label {
+                            width: parent.width
+                            text: qsTr("Category")
+                            color: Theme.secondaryHighlightColor
+                            font.pixelSize: Theme.fontSizeExtraSmall
+                        }
+
+                        Label {
+                            width: parent.width
+                            text: page.paymentData.spendingCategory || ""
+                            color: Theme.primaryColor
+                            font.pixelSize: Theme.fontSizeSmall
+                            wrapMode: Text.Wrap
+                        }
                     }
 
-                    Label {
+                    Column {
                         width: parent.width
+                        spacing: Theme.paddingSmall / 2
                         visible: (page.paymentData.status || "").length > 0
-                        text: qsTr("Status: %1").arg(page.paymentData.status)
-                        color: Theme.primaryColor
-                        wrapMode: Text.Wrap
+
+                        Label {
+                            width: parent.width
+                            text: qsTr("Status")
+                            color: Theme.secondaryHighlightColor
+                            font.pixelSize: Theme.fontSizeExtraSmall
+                        }
+
+                        Label {
+                            width: parent.width
+                            text: page.paymentData.status || ""
+                            color: Theme.primaryColor
+                            font.pixelSize: Theme.fontSizeSmall
+                            wrapMode: Text.Wrap
+                        }
                     }
 
-                    Label {
+                    Column {
                         width: parent.width
+                        spacing: Theme.paddingSmall / 2
                         visible: (page.paymentData.date || "").length > 0
-                        text: qsTr("Date: %1").arg(page.valueOrDash(page.paymentData.date))
-                        color: Theme.primaryColor
-                        wrapMode: Text.Wrap
+
+                        Label {
+                            width: parent.width
+                            text: qsTr("Date")
+                            color: Theme.secondaryHighlightColor
+                            font.pixelSize: Theme.fontSizeExtraSmall
+                        }
+
+                        Label {
+                            width: parent.width
+                            text: page.valueOrDash(page.paymentData.date)
+                            color: Theme.primaryColor
+                            font.pixelSize: Theme.fontSizeSmall
+                            wrapMode: Text.Wrap
+                        }
                     }
                 }
             }

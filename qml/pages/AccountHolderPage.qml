@@ -539,7 +539,7 @@ Page {
                                     width: parent.width
                                     text: qsTr("Verify your email address")
                                     color: Theme.highlightColor
-                                    font.pixelSize: Theme.fontSizeMedium
+                                    font.pixelSize: Theme.fontSizeSmall
                                 }
 
                                 Label {
@@ -748,7 +748,7 @@ Page {
                                 width: parent.width
                                 text: qsTr("Address update")
                                 color: Theme.highlightColor
-                                font.pixelSize: Theme.fontSizeMedium
+                                font.pixelSize: Theme.fontSizeSmall
                             }
 
                             Label {
